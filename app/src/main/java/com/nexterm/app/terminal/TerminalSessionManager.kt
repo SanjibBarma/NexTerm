@@ -104,7 +104,7 @@ class TerminalSession(
     private val _output = MutableStateFlow("")
     val output: StateFlow<String> = _output.asStateFlow()
 
-    private val _isRunning = MutableStateFlow(true)
+    private val _isRunning = MutableStateFlow(false)
     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
 
     private val _title = MutableStateFlow(name)
@@ -127,6 +127,7 @@ class TerminalSession(
     }
 
     fun terminate() {
+        executor.interruptCurrentProcess()
         _isRunning.value = false
     }
 
@@ -150,16 +151,29 @@ class TerminalSession(
                 writeToEmulator("\r\n")
                 writePrompt()
             }
+
             "BACKSPACE" -> {
                 writeToEmulator("\b \b")
             }
+
             "CTRL+L" -> {
                 clear()
                 writePrompt()
             }
+
             "CTRL+C" -> {
-                writeToEmulator("^C\r\n")
+                val interrupted = executor.interruptCurrentProcess()
+                emulator.write("^C\r\n")
+                _isRunning.value = false
+                if (interrupted) {
+                    emulator.write("\r\n")
+                }
                 writePrompt()
+            }
+
+            "CTRL+D" -> {
+                emulator.write("exit\r\n")
+                _isRunning.value = false
             }
         }
     }
@@ -175,7 +189,10 @@ class TerminalSession(
         writeCommandLine(trimmed)
 
         if (handleBuiltInCommand(trimmed)) {
-            emulator.write("\r\n")
+            _isRunning.value = false
+            if (trimmed != "clear") {
+                emulator.write("\r\n")
+            }
             writePrompt()
             return
         }
@@ -196,11 +213,15 @@ class TerminalSession(
                     }
 
                     is ShellOutput.Error -> {
+                        _isRunning.value = false
                         emulator.write("\u001B[31mError: ${result.message}\u001B[0m\r\n")
+                        emulator.write("\r\n")
+                        writePrompt()
                     }
 
                     is ShellOutput.Completed -> {
-                        if (result.exitCode != 0) {
+                        _isRunning.value = false
+                        if (result.exitCode != 0 && result.exitCode != 143) {
                             emulator.write(
                                 "\u001B[33m[exit code: ${result.exitCode}]\u001B[0m\r\n"
                             )
@@ -215,22 +236,18 @@ class TerminalSession(
 
     private fun writeBanner() {
         emulator.write("\u001B[2J\u001B[H")
-        emulator.write("\u001B[36m╔══════════════════════════════╗\u001B[0m\r\n")
-        emulator.write("\u001B[36m║\u001B[0m       \u001B[1;32mWelcome to NexTerm\u001B[0m           \u001B[36m║\u001B[0m\r\n")
-        emulator.write("\u001B[36m║\u001B[0m   \u001B[90mProfessional Android Terminal\u001B[0m    \u001B[36m║\u001B[0m\r\n")
-        emulator.write("\u001B[36m╚══════════════════════════════╝\u001B[0m\r\n")
+        emulator.write("\u001B[36m╔═══════════════════════════════╗\u001B[0m\r\n")
+        emulator.write("\u001B[36m║\u001B[0m       \u001B[1;32mWelcome to NexTerm\u001B[0m            \u001B[36m║\u001B[0m\r\n")
+        emulator.write("\u001B[36m║\u001B[0m   \u001B[90mProfessional Android Terminal\u001B[0m     \u001B[36m║\u001B[0m\r\n")
+        emulator.write("\u001B[36m╚═══════════════════════════════╝\u001B[0m\r\n")
         emulator.write("\r\n")
         emulator.write("\u001B[90mType 'help' to see available commands.\u001B[0m\r\n")
         emulator.write("\r\n")
     }
 
     private fun writePrompt() {
-        val displayPath = currentWorkingDirectory
-            .replace(executor.getHomeDirectory(), "~")
-
-        emulator.write(
-            "\u001B[32mnexterm\u001B[0m:\u001B[34m$displayPath\u001B[0m$ "
-        )
+        val displayPath = currentWorkingDirectory.replace(executor.getHomeDirectory(), "~")
+        emulator.write("\u001B[32mnexterm\u001B[0m:\u001B[34m$displayPath\u001B[0m$ ")
     }
 
     private fun writeCommandLine(command: String) {

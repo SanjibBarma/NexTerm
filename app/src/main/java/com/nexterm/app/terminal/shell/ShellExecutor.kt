@@ -2,14 +2,18 @@ package com.nexterm.app.terminal.shell
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
+import java.io.BufferedReader
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 
 class ShellExecutor(private val context: Context) {
 
     private val homeDir: String by lazy { context.filesDir.absolutePath }
+    private val currentProcess = AtomicReference<Process?>(null)
 
     init {
         setupEnvironment()
@@ -89,9 +93,11 @@ class ShellExecutor(private val context: Context) {
     fun executeCommand(
         command: String,
         workingDirectory: String = homeDir
-    ): Flow<ShellOutput> = flow {
+    ): Flow<ShellOutput> = callbackFlow {
+        var process: Process? = null
+
         try {
-            emit(ShellOutput.Started)
+            trySend(ShellOutput.Started)
 
             val dir = File(workingDirectory).takeIf { it.exists() && it.isDirectory } ?: File(homeDir)
 
@@ -107,27 +113,46 @@ class ShellExecutor(private val context: Context) {
                 redirectErrorStream(true)
             }
 
-            val process = processBuilder.start()
+            process = processBuilder.start()
+            currentProcess.set(process)
 
-            val output = buildString {
-                process.inputStream.bufferedReader().useLines { lines ->
-                    lines.forEach { line ->
-                        append(line)
-                        append("\n")
-                    }
-                }
-            }
+            val reader = BufferedReader(process.inputStream.reader())
 
-            if (output.isNotEmpty()) {
-                emit(ShellOutput.Data(output))
+            while (true) {
+                val line = reader.readLine() ?: break
+                trySend(ShellOutput.Data(line + "\n"))
             }
 
             val exitCode = process.waitFor()
-            emit(ShellOutput.Completed(exitCode))
+            currentProcess.compareAndSet(process, null)
+            trySend(ShellOutput.Completed(exitCode))
+            close()
         } catch (e: Exception) {
-            emit(ShellOutput.Error(e.message ?: "Unknown error"))
+            currentProcess.set(null)
+            trySend(ShellOutput.Error(e.message ?: "Unknown error"))
+            close()
+        }
+
+        awaitClose {
+            process?.destroy()
+            currentProcess.compareAndSet(process, null)
         }
     }.flowOn(Dispatchers.IO)
+
+    fun interruptCurrentProcess(): Boolean {
+        val process = currentProcess.get() ?: return false
+        return try {
+            process.destroy()
+            currentProcess.compareAndSet(process, null)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun isCommandRunning(): Boolean {
+        return currentProcess.get()?.isAlive == true
+    }
 }
 
 enum class SpecialKey {

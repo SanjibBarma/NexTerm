@@ -31,6 +31,8 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.nexterm.app.ui.navigation.Screen
 import com.nexterm.app.ui.theme.TerminalColors
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -164,7 +166,7 @@ fun MainScreen(navController: NavController) {
                         title = "Terminal",
                         subtitle = "Start coding",
                         gradient = listOf(TerminalColors.MonokaiGreen, Color(0xFF2E7D32)),
-                        onClick = { navController.navigate(Screen.Terminal.route) }
+                        onClick = { navController.navigate(Screen.Terminal.createRoute()) }
                     )
                     MainActionCard(
                         modifier = Modifier.weight(1f),
@@ -216,7 +218,8 @@ fun MainScreen(navController: NavController) {
                     title = "Development",
                     description = "Full-stack development with Python, Node.js, PHP, Ruby, Go, Rust, C/C++",
                     tools = listOf("Python 3.11", "Node.js 18", "PHP 8.2", "Ruby 3.2", "Go 1.20", "GCC 12"),
-                    color = TerminalColors.MonokaiGreen
+                    color = TerminalColors.MonokaiGreen,
+                    onToolClick = { tool -> navigateToToolCommand(navController, tool) }
                 )
             }
 
@@ -226,7 +229,8 @@ fun MainScreen(navController: NavController) {
                     title = "Web Servers & Databases",
                     description = "Run production-ready servers and databases locally",
                     tools = listOf("Nginx", "Apache", "MySQL", "PostgreSQL", "Redis", "MongoDB"),
-                    color = TerminalColors.MonokaiBlue
+                    color = TerminalColors.MonokaiBlue,
+                    onToolClick = { tool -> navigateToToolCommand(navController, tool) }
                 )
             }
 
@@ -236,7 +240,8 @@ fun MainScreen(navController: NavController) {
                     title = "Security & Pentesting",
                     description = "Ethical hacking and security analysis tools",
                     tools = listOf("Nmap", "Metasploit", "Hydra", "SQLMap", "Aircrack-ng", "Wireshark"),
-                    color = TerminalColors.MonokaiRed
+                    color = TerminalColors.MonokaiRed,
+                    onToolClick = { tool -> navigateToToolCommand(navController, tool) }
                 )
             }
 
@@ -246,7 +251,8 @@ fun MainScreen(navController: NavController) {
                     title = "Network Analysis",
                     description = "Network scanning, monitoring and diagnostics",
                     tools = listOf("Ping", "Netcat", "TCPDump", "Netstat", "SSH", "Curl/Wget"),
-                    color = TerminalColors.MonokaiCyan
+                    color = TerminalColors.MonokaiCyan,
+                    onToolClick = { tool -> navigateToToolCommand(navController, tool) }
                 )
             }
 
@@ -256,7 +262,8 @@ fun MainScreen(navController: NavController) {
                     title = "DevOps & Automation",
                     description = "Container management, CI/CD and scripting",
                     tools = listOf("Docker", "Git", "Make", "Tmux", "Bash Scripts", "Cron Jobs"),
-                    color = TerminalColors.MonokaiMagenta
+                    color = TerminalColors.MonokaiMagenta,
+                    onToolClick = { tool -> navigateToToolCommand(navController, tool) }
                 )
             }
 
@@ -266,7 +273,8 @@ fun MainScreen(navController: NavController) {
                     title = "Learning & Education",
                     description = "Learn Linux, programming, and system administration",
                     tools = listOf("Linux Commands", "Shell Scripting", "Vim/Nano", "File System", "Networking", "Security"),
-                    color = TerminalColors.MonokaiYellow
+                    color = TerminalColors.MonokaiYellow,
+                    onToolClick = { tool -> navigateToToolCommand(navController, tool) }
                 )
             }
 
@@ -312,6 +320,65 @@ fun MainScreen(navController: NavController) {
 
     if (showPackagesDialog) {
         PackagesDialog(onDismiss = { showPackagesDialog = false })
+    }
+}
+
+private fun getToolCommand(tool: String): String {
+    return when (tool) {
+        "Python 3.11" -> "python --version"
+        "Node.js 18" -> "node --version"
+        "PHP 8.2" -> "php --version"
+        "Ruby 3.2" -> "ruby --version"
+        "Go 1.20" -> "go version"
+        "GCC 12" -> "gcc --version"
+
+        "Nginx" -> "nginx -v"
+        "Apache" -> "apachectl -v"
+        "MySQL" -> "mysql --version"
+        "PostgreSQL" -> "psql --version"
+        "Redis" -> "redis-server --help"
+        "MongoDB" -> "mongod --help"
+
+        "Nmap" -> "nmap --version"
+        "Metasploit" -> "msfconsole --version"
+        "Hydra" -> "hydra -h"
+        "SQLMap" -> "sqlmap --help"
+        "Aircrack-ng" -> "aircrack-ng --help"
+        "Wireshark" -> "wireshark --version"
+
+        "Ping" -> "ping -c 4 8.8.8.8"
+        "Netcat" -> "nc -h"
+        "TCPDump" -> "tcpdump --help"
+        "Netstat" -> "netstat"
+        "SSH" -> "ssh -V"
+        "Curl/Wget" -> "curl --help"
+
+        "Docker" -> "docker --version"
+        "Git" -> "git --version"
+        "Make" -> "make --version"
+        "Tmux" -> "tmux -V"
+        "Bash Scripts" -> "bash --version"
+        "Cron Jobs" -> "crontab -l"
+
+        "Linux Commands" -> "help"
+        "Shell Scripting" -> "sh --help"
+        "Vim/Nano" -> "vim --version"
+        "File System" -> "pwd"
+        "Networking" -> "ifconfig"
+        "Security" -> "help"
+
+        else -> tool.lowercase()
+    }
+}
+
+private fun navigateToToolCommand(
+    navController: NavController,
+    tool: String
+) {
+    val command = getToolCommand(tool)
+    val encodedCommand = URLEncoder.encode(command, StandardCharsets.UTF_8.toString())
+    navController.navigate(Screen.Terminal.createRoute(encodedCommand)) {
+        launchSingleTop = true
     }
 }
 
@@ -391,7 +458,8 @@ fun CapabilityCard(
     title: String,
     description: String,
     tools: List<String>,
-    color: Color
+    color: Color,
+    onToolClick: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -449,7 +517,7 @@ fun CapabilityCard(
                 ) {
                     tools.forEach { tool ->
                         AssistChip(
-                            onClick = { },
+                            onClick = { onToolClick(tool) },
                             label = {
                                 Text(tool, fontSize = 11.sp)
                             },

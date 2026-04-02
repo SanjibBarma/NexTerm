@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -57,14 +58,12 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Appearance Section
             item {
                 SettingsSectionHeader(title = "Appearance", icon = Icons.Default.Palette)
             }
 
             item {
                 SettingsCard {
-                    // Font Size
                     SettingsItem(
                         title = "Font Size",
                         subtitle = "${settings.fontSize}sp",
@@ -74,7 +73,6 @@ fun SettingsScreen(
 
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // Color Scheme
                     Column(
                         modifier = Modifier.padding(16.dp)
                     ) {
@@ -99,9 +97,9 @@ fun SettingsScreen(
                             items(TerminalThemes.all) { theme ->
                                 ColorSchemeChip(
                                     theme = theme,
-                                    isSelected = settings.colorScheme == theme.name.lowercase(),
+                                    isSelected = settings.colorScheme.trim().lowercase() == theme.key,
                                     onClick = {
-                                        viewModel.updateColorScheme(theme.name.lowercase())
+                                        viewModel.updateColorScheme(theme.key)
                                     }
                                 )
                             }
@@ -110,14 +108,12 @@ fun SettingsScreen(
                 }
             }
 
-            // Terminal Section
             item {
                 SettingsSectionHeader(title = "Terminal", icon = Icons.Default.Terminal)
             }
 
             item {
                 SettingsCard {
-                    // Cursor Blink
                     SettingsSwitchItem(
                         title = "Cursor Blink",
                         subtitle = "Animate the cursor",
@@ -128,7 +124,6 @@ fun SettingsScreen(
 
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // Scrollback Lines
                     SettingsItem(
                         title = "Scrollback Buffer",
                         subtitle = "${settings.scrollbackLines} lines",
@@ -138,7 +133,6 @@ fun SettingsScreen(
 
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    // Keep Screen On
                     SettingsSwitchItem(
                         title = "Keep Screen On",
                         subtitle = "Prevent screen from sleeping",
@@ -149,7 +143,6 @@ fun SettingsScreen(
                 }
             }
 
-            // Extra Keys Section
             item {
                 SettingsSectionHeader(title = "Extra Keys", icon = Icons.Default.Keyboard)
             }
@@ -177,7 +170,6 @@ fun SettingsScreen(
                 }
             }
 
-            // About Section
             item {
                 SettingsSectionHeader(title = "About", icon = Icons.Default.Info)
             }
@@ -208,7 +200,6 @@ fun SettingsScreen(
         }
     }
 
-    // Font Size Dialog
     if (showFontSizeDialog) {
         FontSizeDialog(
             currentSize = settings.fontSize,
@@ -220,7 +211,6 @@ fun SettingsScreen(
         )
     }
 
-    // Scrollback Dialog
     if (showScrollbackDialog) {
         ScrollbackDialog(
             currentLines = settings.scrollbackLines,
@@ -232,7 +222,6 @@ fun SettingsScreen(
         )
     }
 
-    // Extra Keys Dialog
     if (showExtraKeysDialog) {
         ExtraKeysDialog(
             currentKeys = settings.extraKeysRow,
@@ -529,7 +518,6 @@ fun ScrollbackDialog(
     )
 }
 
-// ✅ FIX: Use Material3 FlowRow directly with ExperimentalLayoutApi
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExtraKeysDialog(
@@ -571,8 +559,7 @@ fun ExtraKeysDialog(
                     style = MaterialTheme.typography.labelMedium
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                // ✅ Using Material3's FlowRow directly (fully qualified)
-                androidx.compose.foundation.layout.FlowRow(
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {

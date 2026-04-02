@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 
 @Immutable
 data class TerminalColorScheme(
+    val key: String,
     val name: String,
     val background: Color,
     val foreground: Color,
@@ -53,6 +54,7 @@ data class TerminalColorScheme(
 
 object TerminalThemes {
     val Monokai = TerminalColorScheme(
+        key = "monokai",
         name = "Monokai",
         background = TerminalColors.MonokaiBackground,
         foreground = TerminalColors.MonokaiForeground,
@@ -77,6 +79,7 @@ object TerminalThemes {
     )
 
     val Dracula = TerminalColorScheme(
+        key = "dracula",
         name = "Dracula",
         background = TerminalColors.DraculaBackground,
         foreground = TerminalColors.DraculaForeground,
@@ -101,6 +104,7 @@ object TerminalThemes {
     )
 
     val Nord = TerminalColorScheme(
+        key = "nord",
         name = "Nord",
         background = TerminalColors.NordBackground,
         foreground = TerminalColors.NordForeground,
@@ -125,6 +129,7 @@ object TerminalThemes {
     )
 
     val Solarized = TerminalColorScheme(
+        key = "solarized",
         name = "Solarized Dark",
         background = TerminalColors.SolarizedBackground,
         foreground = TerminalColors.SolarizedForeground,
@@ -149,6 +154,7 @@ object TerminalThemes {
     )
 
     val Material = TerminalColorScheme(
+        key = "material",
         name = "Material",
         background = TerminalColors.MaterialBackground,
         foreground = TerminalColors.MaterialForeground,
@@ -175,10 +181,12 @@ object TerminalThemes {
     val all = listOf(Monokai, Dracula, Nord, Solarized, Material)
 
     fun getByName(name: String): TerminalColorScheme {
-        val normalizedName = name.lowercase()
-        return all.find { it.name.lowercase() == normalizedName }
-            ?: all.find { normalizedName.contains(it.name.lowercase()) }
-            ?: all.find { it.name.lowercase().contains(normalizedName) }
+        val normalized = name.trim().lowercase()
+
+        return all.find { it.key == normalized }
+            ?: all.find { it.name.lowercase() == normalized }
+            ?: all.find { normalized.contains(it.key) }
+            ?: all.find { it.name.lowercase().contains(normalized) }
             ?: Monokai
     }
 }

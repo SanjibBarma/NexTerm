@@ -21,7 +21,7 @@ class AppPreferences(private val dataStore: DataStore<Preferences>) {
             TerminalSettings(
                 fontSize = preferences[FONT_SIZE] ?: 14,
                 fontFamily = preferences[FONT_FAMILY] ?: "monospace",
-                colorScheme = preferences[COLOR_SCHEME] ?: "monokai",
+                colorScheme = preferences[COLOR_SCHEME]?.trim()?.lowercase() ?: "monokai",
                 cursorStyle = preferences[CURSOR_STYLE] ?: "block",
                 cursorBlink = preferences[CURSOR_BLINK] ?: true,
                 bellEnabled = preferences[BELL_ENABLED] ?: true,
@@ -43,7 +43,7 @@ class AppPreferences(private val dataStore: DataStore<Preferences>) {
 
     suspend fun updateColorScheme(scheme: String) {
         dataStore.edit { preferences ->
-            preferences[COLOR_SCHEME] = scheme
+            preferences[COLOR_SCHEME] = scheme.trim().lowercase()
         }
     }
 

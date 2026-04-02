@@ -57,7 +57,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -72,23 +71,23 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nexterm.app.terminal.CharacterAttributes
 import com.nexterm.app.terminal.TerminalSession
-import com.nexterm.app.terminal.buffer.TerminalChar
-import com.nexterm.app.terminal.buffer.TerminalLine
 import com.nexterm.app.ui.components.ExtraKeysBar
 import com.nexterm.app.ui.components.TerminalOutputView
 import com.nexterm.app.ui.theme.LocalTerminalColorScheme
 import com.nexterm.app.ui.theme.TerminalColorScheme
 import com.nexterm.app.ui.theme.TerminalThemes
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.koin.androidx.compose.koinViewModel
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalScreen(
+    initialCommand: String? = null,
     viewModel: TerminalViewModel = koinViewModel(),
     onNavigateBack: () -> Unit,
     onNavigateToFiles: () -> Unit,
@@ -98,59 +97,27 @@ fun TerminalScreen(
     val currentSession by viewModel.currentSession.collectAsState()
     val sessions by viewModel.sessions.collectAsState()
     val screenContent by viewModel.screenContent.collectAsState()
+    val spinnerFrames = listOf("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+    var spinnerIndex by remember { mutableStateOf(0) }
 
     val colorScheme = remember(settings.colorScheme) {
         TerminalThemes.getByName(settings.colorScheme)
     }
 
-    TerminalScreenContent(
-        currentSessionName = currentSession?.name ?: "Terminal",
-        currentSessionId = currentSession?.id,
-        sessions = sessions,
-        screenContent = screenContent,
-        fontSize = settings.fontSize,
-        extraKeysEnabled = settings.extraKeysEnabled,
-        extraKeysRow = settings.extraKeysRow,
-        colorScheme = colorScheme,
-        onNavigateBack = onNavigateBack,
-        onNavigateToFiles = onNavigateToFiles,
-        onNavigateToSettings = onNavigateToSettings,
-        onCreateSession = { viewModel.createSession() },
-        onSwitchSession = { session -> viewModel.switchSession(session) },
-        onCloseSession = { session -> viewModel.closeSession(session) },
-        onSendKey = { key -> viewModel.sendKey(key) },
-        onExecuteCommand = { command -> viewModel.executeCommand(command) },
-        onGetPreviousCommand = { viewModel.getPreviousCommand() },
-        onGetNextCommand = { viewModel.getNextCommand() },
-        onResetHistoryNavigation = { viewModel.resetHistoryNavigation() }
-    )
-}
+    val decodedInitialCommand = remember(initialCommand) {
+        initialCommand?.let {
+            URLDecoder.decode(it, StandardCharsets.UTF_8.toString())
+        }
+    }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TerminalScreenContent(
-    currentSessionName: String,
-    currentSessionId: Long?,
-    sessions: List<TerminalSession>,
-    screenContent: List<TerminalLine>,
-    fontSize: Int,
-    extraKeysEnabled: Boolean,
-    extraKeysRow: String,
-    colorScheme: TerminalColorScheme,
-    onNavigateBack: () -> Unit,
-    onNavigateToFiles: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onCreateSession: () -> Unit,
-    onSwitchSession: (TerminalSession) -> Unit,
-    onCloseSession: (TerminalSession) -> Unit,
-    onSendKey: (String) -> Unit,
-    onExecuteCommand: (String) -> Unit,
-    onGetPreviousCommand: () -> String?,
-    onGetNextCommand: () -> String?,
-    onResetHistoryNavigation: () -> Unit
-) {
-    var inputText by remember(currentSessionId) { mutableStateOf("") }
-    var draftInput by remember(currentSessionId) { mutableStateOf("") }
+    var hasExecutedInitialCommand by remember(decodedInitialCommand) { mutableStateOf(false) }
+
+    val isCurrentSessionRunning by remember(currentSession) {
+        currentSession?.isRunning ?: MutableStateFlow(false)
+    }.collectAsState(initial = false)
+
+    var inputText by remember(currentSession?.id) { mutableStateOf("") }
+    var draftInput by remember(currentSession?.id) { mutableStateOf("") }
 
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -159,21 +126,42 @@ fun TerminalScreenContent(
     var showMoreMenu by remember { mutableStateOf(false) }
     var sessionToClose by remember { mutableStateOf<TerminalSession?>(null) }
 
-    LaunchedEffect(currentSessionId) {
+    LaunchedEffect(currentSession?.id) {
         inputText = ""
         draftInput = ""
-        onResetHistoryNavigation()
+        viewModel.resetHistoryNavigation()
         focusRequester.requestFocus()
+    }
+
+    LaunchedEffect(isCurrentSessionRunning) {
+        if (isCurrentSessionRunning) {
+            while (true) {
+                kotlinx.coroutines.delay(100)
+                spinnerIndex = (spinnerIndex + 1) % spinnerFrames.size
+            }
+        } else {
+            spinnerIndex = 0
+        }
+    }
+
+    LaunchedEffect(currentSession?.id, decodedInitialCommand) {
+        if (!hasExecutedInitialCommand &&
+            currentSession != null &&
+            !decodedInitialCommand.isNullOrBlank()
+        ) {
+            viewModel.executeCommand(decodedInitialCommand)
+            hasExecutedInitialCommand = true
+        }
     }
 
     fun submitInput() {
         if (inputText.isBlank()) {
-            onSendKey("ENTER")
+            viewModel.sendKey("ENTER")
         } else {
-            onExecuteCommand(inputText)
+            viewModel.executeCommand(inputText)
             inputText = ""
             draftInput = ""
-            onResetHistoryNavigation()
+            viewModel.resetHistoryNavigation()
         }
         focusRequester.requestFocus()
         keyboardController?.show()
@@ -185,11 +173,11 @@ fun TerminalScreenContent(
                 if (draftInput.isEmpty()) {
                     draftInput = inputText
                 }
-                onGetPreviousCommand()?.let { inputText = it }
+                viewModel.getPreviousCommand()?.let { inputText = it }
             }
 
             "DOWN" -> {
-                val next = onGetNextCommand()
+                val next = viewModel.getNextCommand()
                 inputText = next ?: draftInput
                 if (next == null) {
                     draftInput = ""
@@ -197,7 +185,7 @@ fun TerminalScreenContent(
             }
 
             else -> {
-                onSendKey(key)
+                viewModel.sendKey(key)
                 focusRequester.requestFocus()
             }
         }
@@ -218,9 +206,22 @@ fun TerminalScreenContent(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = currentSessionName,
+                                text = "Terminal",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = colorScheme.foreground
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(
+                                        color = if (isCurrentSessionRunning) {
+                                            colorScheme.green
+                                        } else {
+                                            colorScheme.foreground.copy(alpha = 0.35f)
+                                        },
+                                        shape = CircleShape
+                                    )
                             )
                         }
                     },
@@ -234,7 +235,7 @@ fun TerminalScreenContent(
                         }
                     },
                     actions = {
-                        IconButton(onClick = onCreateSession) {
+                        IconButton(onClick = { viewModel.createSession() }) {
                             Icon(
                                 Icons.Default.Add,
                                 contentDescription = "New Session",
@@ -279,7 +280,7 @@ fun TerminalScreenContent(
                                 DropdownMenuItem(
                                     text = { Text("Clear Screen") },
                                     onClick = {
-                                        onSendKey("CTRL+L")
+                                        viewModel.sendKey("CTRL+L")
                                         showMoreMenu = false
                                     },
                                     leadingIcon = {
@@ -310,7 +311,7 @@ fun TerminalScreenContent(
                                 DropdownMenuItem(
                                     text = { Text("Send CTRL+C") },
                                     onClick = {
-                                        onSendKey("CTRL+C")
+                                        viewModel.sendKey("CTRL+C")
                                         showMoreMenu = false
                                     },
                                     leadingIcon = {
@@ -320,7 +321,7 @@ fun TerminalScreenContent(
                                 DropdownMenuItem(
                                     text = { Text("Send CTRL+D") },
                                     onClick = {
-                                        onSendKey("CTRL+D")
+                                        viewModel.sendKey("CTRL+D")
                                         showMoreMenu = false
                                     },
                                     leadingIcon = {
@@ -342,9 +343,9 @@ fun TerminalScreenContent(
                         .background(colorScheme.background)
                         .navigationBarsPadding()
                 ) {
-                    if (extraKeysEnabled) {
+                    if (settings.extraKeysEnabled) {
                         ExtraKeysBar(
-                            keysRow = extraKeysRow,
+                            keysRow = settings.extraKeysRow,
                             onKeyClick = ::handleExtraKey,
                             colorScheme = colorScheme
                         )
@@ -365,7 +366,7 @@ fun TerminalScreenContent(
                                 text = "❯",
                                 color = colorScheme.green,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = fontSize.sp
+                                fontSize = settings.fontSize.sp
                             )
 
                             Spacer(modifier = Modifier.width(8.dp))
@@ -380,7 +381,7 @@ fun TerminalScreenContent(
                                     onValueChange = {
                                         inputText = it
                                         draftInput = it
-                                        onResetHistoryNavigation()
+                                        viewModel.resetHistoryNavigation()
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -389,7 +390,7 @@ fun TerminalScreenContent(
                                     textStyle = TextStyle(
                                         color = colorScheme.foreground,
                                         fontFamily = FontFamily.Monospace,
-                                        fontSize = fontSize.sp
+                                        fontSize = settings.fontSize.sp
                                     ),
                                     cursorBrush = SolidColor(colorScheme.cursor),
                                     keyboardOptions = KeyboardOptions(
@@ -407,7 +408,7 @@ fun TerminalScreenContent(
                                                     "Enter command...",
                                                     color = colorScheme.foreground.copy(alpha = 0.32f),
                                                     fontFamily = FontFamily.Monospace,
-                                                    fontSize = fontSize.sp
+                                                    fontSize = settings.fontSize.sp
                                                 )
                                             }
                                             innerTextField()
@@ -419,15 +420,25 @@ fun TerminalScreenContent(
                             Spacer(modifier = Modifier.width(6.dp))
 
                             IconButton(
-                                onClick = { submitInput() }
+                                onClick = {
+                                    if (isCurrentSessionRunning) {
+                                        viewModel.sendKey("CTRL+C")
+                                    } else {
+                                        submitInput()
+                                    }
+                                }
                             ) {
                                 Icon(
-                                    Icons.Default.Send,
-                                    contentDescription = "Send",
-                                    tint = if (inputText.isNotBlank()) {
-                                        colorScheme.green
+                                    imageVector = if (isCurrentSessionRunning) {
+                                        Icons.Default.Close
                                     } else {
-                                        colorScheme.foreground.copy(alpha = 0.35f)
+                                        Icons.Default.Send
+                                    },
+                                    contentDescription = if (isCurrentSessionRunning) "Stop" else "Send",
+                                    tint = when {
+                                        isCurrentSessionRunning -> colorScheme.red
+                                        inputText.isNotBlank() -> colorScheme.green
+                                        else -> colorScheme.foreground.copy(alpha = 0.35f)
                                     }
                                 )
                             }
@@ -436,18 +447,50 @@ fun TerminalScreenContent(
                 }
             }
         ) { paddingValues ->
-            TerminalOutputView(
-                lines = screenContent,
-                colorScheme = colorScheme,
-                fontSize = fontSize,
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues),
-                onTap = {
-                    focusRequester.requestFocus()
-                    keyboardController?.show()
+                    .padding(paddingValues)
+            ) {
+                TerminalOutputView(
+                    lines = screenContent,
+                    colorScheme = colorScheme,
+                    fontSize = settings.fontSize,
+                    modifier = Modifier.fillMaxSize(),
+                    onTap = {
+                        focusRequester.requestFocus()
+                        keyboardController?.show()
+                    }
+                )
+
+                if (isCurrentSessionRunning) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(12.dp)
+                            .background(
+                                color = colorScheme.black.copy(alpha = 0.35f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "[${spinnerFrames[spinnerIndex]}]",
+                            color = colorScheme.green,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = settings.fontSize.sp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Running command...",
+                            color = colorScheme.foreground.copy(alpha = 0.9f),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = settings.fontSize.sp
+                        )
+                    }
                 }
-            )
+            }
         }
 
         if (showSessionDrawer) {
@@ -471,7 +514,7 @@ fun TerminalScreenContent(
                             color = colorScheme.foreground
                         )
 
-                        TextButton(onClick = onCreateSession) {
+                        TextButton(onClick = { viewModel.createSession() }) {
                             Icon(
                                 Icons.Default.Add,
                                 contentDescription = null,
@@ -487,11 +530,11 @@ fun TerminalScreenContent(
                     sessions.forEach { session ->
                         SessionItem(
                             session = session,
-                            isActive = session.id == currentSessionId,
+                            isActive = session.id == currentSession?.id,
                             colorScheme = colorScheme,
                             canClose = sessions.size > 1,
                             onClick = {
-                                onSwitchSession(session)
+                                viewModel.switchSession(session)
                                 showSessionDrawer = false
                             },
                             onClose = {
@@ -526,7 +569,7 @@ fun TerminalScreenContent(
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            sessionToClose?.let(onCloseSession)
+                            sessionToClose?.let { viewModel.closeSession(it) }
                             sessionToClose = null
                         }
                     ) {
@@ -599,7 +642,7 @@ fun SessionItem(
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Text(
-                        if (isRunning) "Running" else "Stopped",
+                        if (isRunning) "Running" else "Idle",
                         color = colorScheme.foreground.copy(alpha = 0.5f),
                         style = MaterialTheme.typography.bodySmall
                     )
