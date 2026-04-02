@@ -8,7 +8,13 @@ import com.nexterm.app.data.repository.SettingsRepository
 import com.nexterm.app.terminal.TerminalSession
 import com.nexterm.app.terminal.TerminalSessionManager
 import com.nexterm.app.terminal.buffer.TerminalLine
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class TerminalViewModel(
@@ -36,50 +42,113 @@ class TerminalViewModel(
     val commandHistory: StateFlow<List<String>> = _commandHistory.asStateFlow()
 
     private var historyIndex = -1
+    private var screenContentJob: Job? = null
+    private var restoreJob: Job? = null
 
     init {
         viewModelScope.launch {
             loadCommandHistory()
         }
+        restoreSessionsOnLaunch()
     }
 
-    fun createSession(name: String = "Terminal") {
-        viewModelScope.launch {
-            val sessionId = sessionRepository.createSession(
-                name = name,
-                workingDirectory = ""
-            )
-            val session = sessionManager.createSession(
-                id = sessionId,
-                name = name
-            )
-            _currentSession.value = session
+    private fun restoreSessionsOnLaunch() {
+        if (restoreJob != null) return
 
-            session.screenContent.collect { content ->
-                _screenContent.value = content
+        restoreJob = viewModelScope.launch {
+            val savedSessions = sessionRepository.getActiveSessions().first()
+
+            if (savedSessions.isEmpty()) {
+                createSession()
+                return@launch
             }
 
-            // Show initial prompt
-            session.writeToEmulator("\u001B[32mnexterm\u001B[0m:\u001B[34m~\u001B[0m$ ")
+            val restoredSessions = savedSessions.map { entity ->
+                sessionManager.createSession(
+                    id = entity.id,
+                    name = entity.name,
+                    workingDirectory = entity.workingDirectory.ifBlank {
+                        sessionManager.getDefaultWorkingDirectory()
+                    }
+                )
+            }
+
+            val firstSession = restoredSessions.firstOrNull()
+            _currentSession.value = firstSession
+
+            firstSession?.let {
+                sessionManager.setCurrentSession(it.id)
+                observeSessionScreenContent(it)
+                sessionRepository.updateLastAccessed(it.id)
+            }
+        }
+    }
+
+    fun createSession(name: String = generateNextSessionName()) {
+        viewModelScope.launch {
+            val workingDirectory = sessionManager.getDefaultWorkingDirectory()
+
+            val sessionId = sessionRepository.createSession(
+                name = name,
+                workingDirectory = workingDirectory
+            )
+
+            val session = sessionManager.createSession(
+                id = sessionId,
+                name = name,
+                workingDirectory = workingDirectory
+            )
+
+            _currentSession.value = session
+            sessionManager.setCurrentSession(session.id)
+            observeSessionScreenContent(session)
+            sessionRepository.updateLastAccessed(session.id)
         }
     }
 
     fun switchSession(session: TerminalSession) {
+        if (_currentSession.value?.id == session.id) return
+
         _currentSession.value = session
+        sessionManager.setCurrentSession(session.id)
+
         viewModelScope.launch {
-            session.screenContent.collect { content ->
-                _screenContent.value = content
-            }
+            sessionRepository.updateLastAccessed(session.id)
         }
+
+        observeSessionScreenContent(session)
     }
 
     fun closeSession(session: TerminalSession) {
         viewModelScope.launch {
+            val currentSessions = sessions.value
+            if (currentSessions.size <= 1) return@launch
+
+            val closingIndex = currentSessions.indexOfFirst { it.id == session.id }
+            val isClosingCurrent = _currentSession.value?.id == session.id
+
             sessionManager.closeSession(session.id)
             sessionRepository.deleteSession(session.id)
 
-            if (_currentSession.value?.id == session.id) {
-                _currentSession.value = sessions.value.firstOrNull()
+            val remainingSessions = sessions.value
+
+            if (isClosingCurrent) {
+                val nextSession = when {
+                    remainingSessions.isEmpty() -> null
+                    closingIndex in remainingSessions.indices -> remainingSessions[closingIndex]
+                    else -> remainingSessions.lastOrNull()
+                }
+
+                _currentSession.value = nextSession
+
+                if (nextSession != null) {
+                    sessionManager.setCurrentSession(nextSession.id)
+                    observeSessionScreenContent(nextSession)
+                    sessionRepository.updateLastAccessed(nextSession.id)
+                } else {
+                    screenContentJob?.cancel()
+                    _screenContent.value = emptyList()
+                }
             }
         }
     }
@@ -97,26 +166,25 @@ class TerminalViewModel(
     }
 
     fun executeCommand(command: String) {
-        viewModelScope.launch {
-            _currentSession.value?.let { session ->
-                // Display the command
-                session.writeToEmulator("$command\n")
-                // Execute it
-                session.executeCommand(command)
-            }
+        val trimmed = command.trim()
+        if (trimmed.isEmpty()) return
 
-            // Add to history
-            val sessionId = _currentSession.value?.id ?: return@launch
+        viewModelScope.launch {
+            val session = _currentSession.value ?: return@launch
+
+            session.executeCommand(trimmed)
+
             sessionRepository.addCommandToHistory(
-                sessionId = sessionId,
-                command = command,
+                sessionId = session.id,
+                command = trimmed,
                 output = "",
                 exitCode = 0,
                 executionTimeMs = 0
             )
 
-            _commandHistory.value = _commandHistory.value + command
+            _commandHistory.value = (_commandHistory.value + trimmed).distinct()
             historyIndex = -1
+            sessionRepository.updateLastAccessed(session.id)
         }
     }
 
@@ -141,8 +209,27 @@ class TerminalViewModel(
         val history = _commandHistory.value
         if (history.isEmpty() || historyIndex == -1) return null
 
-        historyIndex = (historyIndex + 1).coerceAtMost(history.lastIndex)
-        return history.getOrNull(historyIndex)
+        historyIndex++
+
+        return if (historyIndex > history.lastIndex) {
+            historyIndex = -1
+            null
+        } else {
+            history.getOrNull(historyIndex)
+        }
+    }
+
+    fun resetHistoryNavigation() {
+        historyIndex = -1
+    }
+
+    private fun observeSessionScreenContent(session: TerminalSession) {
+        screenContentJob?.cancel()
+        screenContentJob = viewModelScope.launch {
+            session.screenContent.collect { content ->
+                _screenContent.value = content
+            }
+        }
     }
 
     private suspend fun loadCommandHistory() {
@@ -150,8 +237,21 @@ class TerminalViewModel(
         _commandHistory.value = commands
     }
 
+    private fun generateNextSessionName(): String {
+        val regex = Regex("""^Terminal(?:\s+(\d+))?$""", RegexOption.IGNORE_CASE)
+
+        val maxNumber = sessions.value.mapNotNull { session ->
+            val match = regex.matchEntire(session.name.trim()) ?: return@mapNotNull null
+            match.groupValues.getOrNull(1)?.toIntOrNull() ?: 1
+        }.maxOrNull() ?: 0
+
+        return if (maxNumber == 0) "Terminal 1" else "Terminal ${maxNumber + 1}"
+    }
+
     override fun onCleared() {
         super.onCleared()
+        screenContentJob?.cancel()
+        restoreJob?.cancel()
         sessionManager.closeAllSessions()
     }
 }

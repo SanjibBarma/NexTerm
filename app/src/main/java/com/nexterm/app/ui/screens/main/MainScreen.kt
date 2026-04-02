@@ -124,7 +124,6 @@ fun MainScreen(navController: NavController) {
                         )
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Terminal preview
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -145,7 +144,6 @@ fun MainScreen(navController: NavController) {
                 }
             }
 
-            // Quick Actions Header
             item {
                 Text(
                     "Quick Actions",
@@ -154,7 +152,6 @@ fun MainScreen(navController: NavController) {
                 )
             }
 
-            // Main Actions
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -203,7 +200,6 @@ fun MainScreen(navController: NavController) {
                 }
             }
 
-            // Capabilities Section
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -213,7 +209,6 @@ fun MainScreen(navController: NavController) {
                 )
             }
 
-            // Capability Cards
             item {
                 CapabilityCard(
                     icon = Icons.Default.Code,
@@ -274,7 +269,6 @@ fun MainScreen(navController: NavController) {
                 )
             }
 
-            // System Info
             item {
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
@@ -307,17 +301,14 @@ fun MainScreen(navController: NavController) {
         }
     }
 
-    // About Dialog
     if (showAboutDialog) {
         AboutDialog(onDismiss = { showAboutDialog = false })
     }
 
-    // Features Dialog
     if (showFeaturesDialog) {
         FeaturesDialog(onDismiss = { showFeaturesDialog = false })
     }
 
-    // Packages Dialog
     if (showPackagesDialog) {
         PackagesDialog(onDismiss = { showPackagesDialog = false })
     }
@@ -392,6 +383,8 @@ fun MainActionCard(
     }
 }
 
+// ✅ FIX: Use Material3 FlowRow directly with ExperimentalLayoutApi
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CapabilityCard(
     icon: ImageVector,
@@ -442,7 +435,8 @@ fun CapabilityCard(
                     )
                 }
                 Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    imageVector = if (expanded) Icons.Default.ExpandLess
+                    else Icons.Default.ExpandMore,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -450,6 +444,7 @@ fun CapabilityCard(
 
             if (expanded) {
                 Spacer(modifier = Modifier.height(12.dp))
+                // ✅ This is now androidx.compose.foundation.layout.FlowRow
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -473,21 +468,7 @@ fun CapabilityCard(
     }
 }
 
-@Composable
-fun FlowRow(
-    modifier: Modifier = Modifier,
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
-    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
-    content: @Composable () -> Unit
-) {
-    FlowRow(
-        modifier = modifier,
-        horizontalArrangement = horizontalArrangement,
-        verticalArrangement = verticalArrangement
-    ) {
-        content()
-    }
-}
+// ❌ DELETED: The custom FlowRow function that caused infinite recursion
 
 @Composable
 fun SystemInfoRow(label: String, value: String) {
@@ -529,7 +510,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // Header
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -596,14 +576,12 @@ fun AboutDialog(onDismiss: () -> Unit) {
                     }
                 }
 
-                // Content
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(20.dp)
                 ) {
-                    // Description
                     Text(
                         "NexTerm হলো Android এর জন্য সবচেয়ে powerful ও professional terminal emulator। " +
                                 "এটি দিয়ে আপনি আপনার phone থেকেই full-scale development, server management, " +
@@ -615,7 +593,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Features Sections
                     AboutSection(
                         icon = Icons.Default.Code,
                         title = "🚀 Development",
@@ -730,7 +707,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Tech Stack
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -766,7 +742,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Close Button
                     Button(
                         onClick = onDismiss,
                         modifier = Modifier.fillMaxWidth(),

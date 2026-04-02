@@ -4,26 +4,28 @@ import android.content.Context
 import com.nexterm.app.terminal.ansi.AnsiParser
 import com.nexterm.app.terminal.shell.ShellExecutor
 import com.nexterm.app.terminal.shell.ShellOutput
-import com.nexterm.app.terminal.shell.SpecialKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import java.io.File
 
 class TerminalSessionManager(private val context: Context) {
 
-    private val sessions = mutableMapOf<Long, TerminalSession>()
+    private val sessions = linkedMapOf<Long, TerminalSession>()
+
     private val _activeSessions = MutableStateFlow<List<TerminalSession>>(emptyList())
     val activeSessions: StateFlow<List<TerminalSession>> = _activeSessions.asStateFlow()
 
     private val _currentSession = MutableStateFlow<TerminalSession?>(null)
     val currentSession: StateFlow<TerminalSession?> = _currentSession.asStateFlow()
 
-    private val scope = CoroutineScope(Dispatchers.Main + Job())
     private val ansiParser = AnsiParser()
+
+    fun getDefaultWorkingDirectory(): String = context.filesDir.absolutePath
 
     fun createSession(
         id: Long,
@@ -32,26 +34,34 @@ class TerminalSessionManager(private val context: Context) {
         rows: Int = 24,
         cols: Int = 80
     ): TerminalSession {
+        sessions[id]?.let { existing ->
+            _currentSession.value = existing
+            updateSessionsList()
+            return existing
+        }
+
         val emulator = TerminalEmulator(rows, cols, ansiParser)
         val executor = ShellExecutor(context)
+
+        val resolvedWorkingDirectory = if (workingDirectory.isBlank()) {
+            context.filesDir.absolutePath
+        } else {
+            workingDirectory
+        }
 
         val session = TerminalSession(
             id = id,
             name = name,
-            workingDirectory = workingDirectory,
+            initialWorkingDirectory = resolvedWorkingDirectory,
             emulator = emulator,
-            executor = executor,
-            rows = rows,
-            cols = cols
+            executor = executor
         )
 
         sessions[id] = session
+        _currentSession.value = session
         updateSessionsList()
 
-        // Start shell
-        scope.launch {
-            session.start()
-        }
+        session.start()
 
         return session
     }
@@ -87,154 +97,206 @@ class TerminalSessionManager(private val context: Context) {
 class TerminalSession(
     val id: Long,
     val name: String,
-    val workingDirectory: String,
+    initialWorkingDirectory: String,
     private val emulator: TerminalEmulator,
-    private val executor: ShellExecutor,
-    private val rows: Int,
-    private val cols: Int
+    private val executor: ShellExecutor
 ) {
     private val _output = MutableStateFlow("")
     val output: StateFlow<String> = _output.asStateFlow()
 
-    private val _isRunning = MutableStateFlow(false)
+    private val _isRunning = MutableStateFlow(true)
     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
 
     private val _title = MutableStateFlow(name)
     val title: StateFlow<String> = _title.asStateFlow()
 
     private val scope = CoroutineScope(Dispatchers.IO + Job())
-    private var collectJob: Job? = null
-
-    private val commandMutex = Mutex()
 
     val screenContent = emulator.screenContent
     val cursorPosition = emulator.cursorPosition
 
-    suspend fun start() {
-        collectJob = scope.launch {
-            executor.startShell(
-                workingDirectory = workingDirectory,
-                rows = rows,
-                cols = cols
-            ).collect { output ->
-                when (output) {
-                    is ShellOutput.Started -> {
-                        _isRunning.value = true
-                    }
-                    is ShellOutput.Data -> {
-                        emulator.write(output.text)
-                        _output.value += output.text
-                    }
-                    is ShellOutput.Error -> {
-                        val errorMsg = "\r\n\u001B[31mError: ${output.message}\u001B[0m\r\n"
-                        emulator.write(errorMsg)
-                    }
-                    is ShellOutput.Exited -> {
-                        _isRunning.value = false
-                        val exitMsg = "\r\n\u001B[33m[Process completed with exit code: ${output.exitCode}]\u001B[0m\r\n"
-                        emulator.write(exitMsg)
-                    }
-                    else -> {}
-                }
-            }
-        }
-    }
+    private var currentWorkingDirectory: String = initialWorkingDirectory
 
-    suspend fun sendInput(input: String) {
-        executor.sendInput(input)
-    }
-
-    suspend fun sendKey(key: String) {
-        val specialKey = when (key.uppercase()) {
-            "CTRL+C" -> SpecialKey.CTRL_C
-            "CTRL+D" -> SpecialKey.CTRL_D
-            "CTRL+Z" -> SpecialKey.CTRL_Z
-            "CTRL+L" -> SpecialKey.CTRL_L
-            "CTRL+A" -> SpecialKey.CTRL_A
-            "CTRL+E" -> SpecialKey.CTRL_E
-            "CTRL+U" -> SpecialKey.CTRL_U
-            "CTRL+K" -> SpecialKey.CTRL_K
-            "CTRL+W" -> SpecialKey.CTRL_W
-            "TAB" -> SpecialKey.TAB
-            "ENTER" -> SpecialKey.ENTER
-            "BACKSPACE" -> SpecialKey.BACKSPACE
-            "ESCAPE", "ESC" -> SpecialKey.ESCAPE
-            "UP" -> SpecialKey.UP
-            "DOWN" -> SpecialKey.DOWN
-            "RIGHT" -> SpecialKey.RIGHT
-            "LEFT" -> SpecialKey.LEFT
-            "HOME" -> SpecialKey.HOME
-            "END" -> SpecialKey.END
-            "PGUP" -> SpecialKey.PAGE_UP
-            "PGDN" -> SpecialKey.PAGE_DOWN
-            "DELETE", "DEL" -> SpecialKey.DELETE
-            "INSERT", "INS" -> SpecialKey.INSERT
-            "F1" -> SpecialKey.F1
-            "F2" -> SpecialKey.F2
-            "F3" -> SpecialKey.F3
-            "F4" -> SpecialKey.F4
-            "F5" -> SpecialKey.F5
-            "F6" -> SpecialKey.F6
-            "F7" -> SpecialKey.F7
-            "F8" -> SpecialKey.F8
-            "F9" -> SpecialKey.F9
-            "F10" -> SpecialKey.F10
-            "F11" -> SpecialKey.F11
-            "F12" -> SpecialKey.F12
-            else -> null
-        }
-
-        if (specialKey != null) {
-            executor.sendSpecialKey(specialKey)
-        } else {
-            // It's a regular character
-            executor.sendInput(key)
-        }
+    fun start() {
+        writeBanner()
+        writePrompt()
     }
 
     fun resize(rows: Int, cols: Int) {
         emulator.resize(rows, cols)
-        executor.resize(rows, cols)
     }
 
     fun terminate() {
-        collectJob?.cancel()
-        executor.terminate()
         _isRunning.value = false
     }
-
-    fun getScrollbackHistory() = emulator.getScrollbackHistory()
 
     fun clear() {
         emulator.write("\u001B[2J\u001B[H")
     }
 
+    fun writeToEmulator(text: String) {
+        emulator.write(text)
+    }
+
+    fun getScrollbackHistory() = emulator.getScrollbackHistory()
+
+    suspend fun sendInput(input: String) {
+        writeToEmulator(input)
+    }
+
+    suspend fun sendKey(key: String) {
+        when (key.uppercase()) {
+            "ENTER" -> {
+                writeToEmulator("\r\n")
+                writePrompt()
+            }
+            "BACKSPACE" -> {
+                writeToEmulator("\b \b")
+            }
+            "CTRL+L" -> {
+                clear()
+                writePrompt()
+            }
+            "CTRL+C" -> {
+                writeToEmulator("^C\r\n")
+                writePrompt()
+            }
+        }
+    }
+
     suspend fun executeCommand(command: String) {
-        commandMutex.withLock {
-            scope.launch {
-                executor.executeCommand(command).collect { output ->
-                    when (output) {
-                        is ShellOutput.Data -> {
-                            emulator.write(output.text)
+        val trimmed = command.trim()
+
+        if (trimmed.isEmpty()) {
+            writePrompt()
+            return
+        }
+
+        writeCommandLine(trimmed)
+
+        if (handleBuiltInCommand(trimmed)) {
+            writePrompt()
+            return
+        }
+
+        scope.launch {
+            executor.executeCommand(
+                command = trimmed,
+                workingDirectory = currentWorkingDirectory
+            ).collect { result ->
+                when (result) {
+                    is ShellOutput.Started -> {
+                        _isRunning.value = true
+                    }
+
+                    is ShellOutput.Data -> {
+                        emulator.write(result.text)
+                        _output.value += result.text
+                    }
+
+                    is ShellOutput.Error -> {
+                        emulator.write("\u001B[31mError: ${result.message}\u001B[0m\r\n")
+                    }
+
+                    is ShellOutput.Completed -> {
+                        if (result.exitCode != 0) {
+                            emulator.write(
+                                "\u001B[33m[exit code: ${result.exitCode}]\u001B[0m\r\n"
+                            )
                         }
-                        is ShellOutput.Error -> {
-                            val errorMsg = "\r\n\u001B[31mError: ${output.message}\u001B[0m\r\n"
-                            emulator.write(errorMsg)
-                        }
-                        is ShellOutput.CommandCompleted -> {
-                            val exitMsg = "\r\n\u001B[33m[Command completed with exit code: ${output.exitCode}]\u001B[0m\r\n"
-                            emulator.write(exitMsg)
-                            // Show prompt again
-                            emulator.write("\u001B[32mnexterm\u001B[0m:\u001B[34m~\u001B[0m$ ")
-                        }
-                        else -> {}
+                        writePrompt()
                     }
                 }
             }
         }
     }
 
-    fun writeToEmulator(text: String) {
-        emulator.write(text)
+    private fun writeBanner() {
+        emulator.write("\u001B[2J\u001B[H")
+        emulator.write("\u001B[36m╔══════════════════════════════╗\u001B[0m\r\n")
+        emulator.write("\u001B[36m║\u001B[0m       \u001B[1;32mWelcome to NexTerm\u001B[0m           \u001B[36m║\u001B[0m\r\n")
+        emulator.write("\u001B[36m║\u001B[0m   \u001B[90mProfessional Android Terminal\u001B[0m    \u001B[36m║\u001B[0m\r\n")
+        emulator.write("\u001B[36m╚══════════════════════════════╝\u001B[0m\r\n")
+        emulator.write("\r\n")
+        emulator.write("\u001B[90mType 'help' to see available commands.\u001B[0m\r\n")
+        emulator.write("\r\n")
+    }
+
+    private fun writePrompt() {
+        val displayPath = currentWorkingDirectory
+            .replace(executor.getHomeDirectory(), "~")
+
+        emulator.write(
+            "\u001B[32mnexterm\u001B[0m:\u001B[34m$displayPath\u001B[0m$ "
+        )
+    }
+
+    private fun writeCommandLine(command: String) {
+        emulator.write("$command\r\n")
+    }
+
+    private fun handleBuiltInCommand(command: String): Boolean {
+        return when {
+            command == "clear" -> {
+                clear()
+                true
+            }
+
+            command == "pwd" -> {
+                emulator.write("$currentWorkingDirectory\r\n")
+                true
+            }
+
+            command == "help" -> {
+                emulator.write("\u001B[1;32mNexTerm Help\u001B[0m\r\n")
+                emulator.write("\u001B[90m────────────────────────────────────\u001B[0m\r\n")
+                emulator.write("Built-in:\r\n")
+                emulator.write("  clear, pwd, cd, help, exit\r\n")
+                emulator.write("\r\n")
+                emulator.write("System commands:\r\n")
+                emulator.write("  ls, cat, mkdir, rm, touch, cp, mv, uname, date\r\n")
+                emulator.write("\r\n")
+                true
+            }
+
+            command == "exit" -> {
+                emulator.write("logout\r\n")
+                _isRunning.value = false
+                true
+            }
+
+            command == "cd" -> {
+                currentWorkingDirectory = executor.getHomeDirectory()
+                true
+            }
+
+            command.startsWith("cd ") -> {
+                val target = command.removePrefix("cd ").trim()
+                val newDir = resolveDirectory(target)
+
+                if (newDir != null) {
+                    currentWorkingDirectory = newDir.absolutePath
+                } else {
+                    emulator.write("cd: no such file or directory: $target\r\n")
+                }
+                true
+            }
+
+            else -> false
+        }
+    }
+
+    private fun resolveDirectory(path: String): File? {
+        val targetFile = when {
+            path == "~" -> File(executor.getHomeDirectory())
+            path.startsWith("/") -> File(path)
+            else -> File(currentWorkingDirectory, path)
+        }
+
+        return if (targetFile.exists() && targetFile.isDirectory) {
+            targetFile
+        } else {
+            null
+        }
     }
 }

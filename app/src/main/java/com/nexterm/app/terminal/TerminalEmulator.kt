@@ -27,8 +27,13 @@ class TerminalEmulator(
     private val scrollbackBuffer = mutableListOf<TerminalLine>()
     private var maxScrollback = 10000
 
+    init {
+        updateScreen()
+    }
+
     fun write(data: String) {
         val parsedSequences = ansiParser.parse(data)
+
         parsedSequences.forEach { sequence ->
             when (sequence) {
                 is AnsiParser.ParsedSequence.Text -> writeText(sequence.text)
@@ -36,6 +41,7 @@ class TerminalEmulator(
                 is AnsiParser.ParsedSequence.EscapeSequence -> handleEscapeSequence(sequence)
             }
         }
+
         updateScreen()
     }
 
@@ -46,14 +52,18 @@ class TerminalEmulator(
     }
 
     private fun writeChar(char: Char) {
-        val cursor = _cursorPosition.value
-        val buffer = _buffer.value
+        var cursor = _cursorPosition.value
+        var buffer = _buffer.value
 
         if (cursor.col >= cols) {
             newLine()
+            cursor = _cursorPosition.value
+            buffer = _buffer.value
         }
 
         buffer.setChar(cursor.row, cursor.col, char, currentAttributes)
+        _buffer.value = buffer.copy()
+
         _cursorPosition.value = cursor.copy(col = cursor.col + 1)
     }
 
@@ -80,6 +90,13 @@ class TerminalEmulator(
             "s" -> saveCursor()
             "u" -> restoreCursor()
             "r" -> setScrollRegion(sequence.params)
+            "IND" -> newLine()
+            "NEL" -> {
+                newLine()
+                carriageReturn()
+            }
+            "RI" -> reverseIndex()
+            "RIS" -> reset()
         }
     }
 
@@ -165,19 +182,11 @@ class TerminalEmulator(
         val cursor = _cursorPosition.value
 
         when (mode) {
-            0 -> {
-                // Clear from cursor to end of screen
-                buffer.clearRange(cursor.row, cursor.col, rows - 1, cols - 1)
-            }
-            1 -> {
-                // Clear from start of screen to cursor
-                buffer.clearRange(0, 0, cursor.row, cursor.col)
-            }
-            2, 3 -> {
-                // Clear entire screen
-                buffer.clear()
-            }
+            0 -> buffer.clearRange(cursor.row, cursor.col, rows - 1, cols - 1)
+            1 -> buffer.clearRange(0, 0, cursor.row, cursor.col)
+            2, 3 -> buffer.clear()
         }
+
         _buffer.value = buffer.copy()
     }
 
@@ -190,13 +199,16 @@ class TerminalEmulator(
             1 -> buffer.clearLine(cursor.row, 0, cursor.col)
             2 -> buffer.clearLine(cursor.row, 0, cols - 1)
         }
+
         _buffer.value = buffer.copy()
     }
 
     private fun setScrollRegion(params: List<Int>) {
         val top = (params.getOrNull(0) ?: 1) - 1
         val bottom = (params.getOrNull(1) ?: rows) - 1
-        _buffer.value.setScrollRegion(top, bottom)
+        val buffer = _buffer.value
+        buffer.setScrollRegion(top, bottom)
+        _buffer.value = buffer.copy()
     }
 
     private fun saveCursor() {
@@ -209,6 +221,7 @@ class TerminalEmulator(
 
     private fun newLine() {
         val cursor = _cursorPosition.value
+
         if (cursor.row >= rows - 1) {
             scroll()
         } else {
@@ -234,28 +247,50 @@ class TerminalEmulator(
     }
 
     private fun bell() {
-        // Trigger bell notification
+        // no-op
+    }
+
+    private fun reverseIndex() {
+        val cursor = _cursorPosition.value
+        _cursorPosition.value = cursor.copy(row = (cursor.row - 1).coerceAtLeast(0))
+    }
+
+    private fun reset() {
+        _buffer.value = TerminalBuffer(rows, cols)
+        _cursorPosition.value = CursorPosition(0, 0)
+        currentAttributes = CharacterAttributes()
+        savedCursorPosition = CursorPosition(0, 0)
+        updateScreen()
     }
 
     private fun scroll() {
         val buffer = _buffer.value
         val firstLine = buffer.getLine(0)
-        if (firstLine != null && scrollbackBuffer.size < maxScrollback) {
-            scrollbackBuffer.add(firstLine)
+
+        if (firstLine != null) {
+            scrollbackBuffer.add(firstLine.copy())
+            while (scrollbackBuffer.size > maxScrollback) {
+                scrollbackBuffer.removeAt(0)
+            }
         }
+
         buffer.scrollUp()
         _buffer.value = buffer.copy()
         _cursorPosition.value = _cursorPosition.value.copy(col = 0)
     }
 
     private fun updateScreen() {
-        _screenContent.value = _buffer.value.getLines()
+        _screenContent.value = _buffer.value.getDisplayLines()
     }
 
     fun resize(newRows: Int, newCols: Int) {
         rows = newRows
         cols = newCols
         _buffer.value = _buffer.value.resize(newRows, newCols)
+        _cursorPosition.value = CursorPosition(
+            row = _cursorPosition.value.row.coerceIn(0, newRows - 1),
+            col = _cursorPosition.value.col.coerceIn(0, newCols - 1)
+        )
         updateScreen()
     }
 

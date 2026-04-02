@@ -529,6 +529,8 @@ fun ScrollbackDialog(
     )
 }
 
+// ✅ FIX: Use Material3 FlowRow directly with ExperimentalLayoutApi
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExtraKeysDialog(
     currentKeys: String,
@@ -569,7 +571,8 @@ fun ExtraKeysDialog(
                     style = MaterialTheme.typography.labelMedium
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(
+                // ✅ Using Material3's FlowRow directly (fully qualified)
+                androidx.compose.foundation.layout.FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -595,20 +598,4 @@ fun ExtraKeysDialog(
             }
         }
     )
-}
-
-@Composable
-fun FlowRow(
-    modifier: Modifier = Modifier,
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.Start,
-    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
-    content: @Composable () -> Unit
-) {
-    FlowRow(
-        modifier = modifier,
-        horizontalArrangement = horizontalArrangement,
-        verticalArrangement = verticalArrangement
-    ) {
-        content()
-    }
 }

@@ -6,7 +6,7 @@ class TerminalBuffer(
     private var rows: Int,
     private var cols: Int
 ) {
-    private val lines: MutableList<TerminalLine> = MutableList(rows) { TerminalLine(cols) }
+    internal val lines: MutableList<TerminalLine> = MutableList(rows) { TerminalLine(cols) }
     private var scrollTop = 0
     private var scrollBottom = rows - 1
 
@@ -19,7 +19,9 @@ class TerminalBuffer(
     fun getChar(row: Int, col: Int): TerminalChar? {
         return if (row in 0 until rows && col in 0 until cols) {
             lines[row].getChar(col)
-        } else null
+        } else {
+            null
+        }
     }
 
     fun getLine(row: Int): TerminalLine? {
@@ -27,6 +29,15 @@ class TerminalBuffer(
     }
 
     fun getLines(): List<TerminalLine> = lines.toList()
+
+    fun getDisplayLines(): List<TerminalLine> {
+        val lastNonEmptyIndex = lines.indexOfLast { !it.isBlank() }
+        return if (lastNonEmptyIndex == -1) {
+            listOf(TerminalLine(cols))
+        } else {
+            lines.take(lastNonEmptyIndex + 1).map { it.copy() }
+        }
+    }
 
     fun clear() {
         lines.forEach { it.clear() }
@@ -53,7 +64,7 @@ class TerminalBuffer(
     fun scrollUp(count: Int = 1) {
         repeat(count) {
             for (row in scrollTop until scrollBottom) {
-                lines[row] = lines[row + 1]
+                lines[row] = lines[row + 1].copy()
             }
             lines[scrollBottom] = TerminalLine(cols)
         }
@@ -62,7 +73,7 @@ class TerminalBuffer(
     fun scrollDown(count: Int = 1) {
         repeat(count) {
             for (row in scrollBottom downTo scrollTop + 1) {
-                lines[row] = lines[row - 1]
+                lines[row] = lines[row - 1].copy()
             }
             lines[scrollTop] = TerminalLine(cols)
         }
@@ -70,11 +81,12 @@ class TerminalBuffer(
 
     fun setScrollRegion(top: Int, bottom: Int) {
         scrollTop = top.coerceIn(0, rows - 1)
-        scrollBottom = bottom.coerceIn(0, rows - 1)
+        scrollBottom = bottom.coerceIn(scrollTop, rows - 1)
     }
 
     fun resize(newRows: Int, newCols: Int): TerminalBuffer {
         val newBuffer = TerminalBuffer(newRows, newCols)
+
         for (row in 0 until minOf(rows, newRows)) {
             for (col in 0 until minOf(cols, newCols)) {
                 getChar(row, col)?.let { char ->
@@ -82,6 +94,7 @@ class TerminalBuffer(
                 }
             }
         }
+
         return newBuffer
     }
 
@@ -129,9 +142,11 @@ class TerminalLine(private val cols: Int) {
         return newLine
     }
 
-    fun getText(): String = chars.map { it.char }.joinToString("")
+    fun getText(): String = chars.joinToString("") { it.char.toString() }
 
     fun getChars(): List<TerminalChar> = chars.toList()
+
+    fun isBlank(): Boolean = chars.all { it.char == ' ' }
 }
 
 data class TerminalChar(

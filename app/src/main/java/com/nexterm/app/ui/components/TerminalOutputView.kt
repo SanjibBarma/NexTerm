@@ -3,13 +3,18 @@ package com.nexterm.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -21,6 +26,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexterm.app.terminal.buffer.TerminalLine
@@ -38,21 +44,9 @@ fun TerminalOutputView(
     val horizontalScrollState = rememberScrollState()
     val clipboardManager = LocalClipboardManager.current
 
-    var selectedText by remember { mutableStateOf("") }
-
     LaunchedEffect(lines.size) {
         if (lines.isNotEmpty()) {
-            listState.animateScrollToItem(lines.lastIndex)
-        }
-    }
-
-    LaunchedEffect(lines) {
-        if (lines.isNotEmpty()) {
-            // Scroll to bottom
-            listState.animateScrollToItem(lines.lastIndex)
-
-            // Print the terminal output
-            printTerminalOutput(lines)
+            listState.scrollToItem(lines.lastIndex)
         }
     }
 
@@ -60,13 +54,20 @@ fun TerminalOutputView(
         modifier = modifier
             .fillMaxSize()
             .background(colorScheme.background)
-            .pointerInput(Unit) {
+            .pointerInput(lines) {
                 detectTapGestures(
                     onTap = { onTap() },
                     onLongPress = {
-                        // Copy all visible text to clipboard
-                        val text = lines.joinToString("\n") { it.getText().trimEnd() }
-                        clipboardManager.setText(AnnotatedString(text))
+                        val text = buildString {
+                            lines.forEach { line ->
+                                append(line.getText().trimEnd())
+                                append("\n")
+                            }
+                        }.trimEnd()
+
+                        if (text.isNotEmpty()) {
+                            clipboardManager.setText(AnnotatedString(text))
+                        }
                     }
                 )
             }
@@ -76,12 +77,12 @@ fun TerminalOutputView(
             modifier = Modifier
                 .fillMaxSize()
                 .horizontalScroll(horizontalScrollState)
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
-            items(
+            itemsIndexed(
                 items = lines,
-                key = { it.hashCode() }
-            ) { line ->
+                key = { index, _ -> index }
+            ) { _, line ->
                 TerminalLineView(
                     line = line,
                     colorScheme = colorScheme,
@@ -101,8 +102,8 @@ fun TerminalLineView(
     val annotatedString = remember(line, colorScheme) {
         buildAnnotatedString {
             val chars = line.getChars()
+
             if (chars.isEmpty()) {
-                // Empty line, add a space to maintain line height
                 append(" ")
                 return@buildAnnotatedString
             }
@@ -110,7 +111,6 @@ fun TerminalLineView(
             chars.forEach { terminalChar ->
                 val attrs = terminalChar.attributes
 
-                // Determine foreground color
                 val fgColor = when {
                     attrs.inverse -> colorScheme.getColor(attrs.background)
                     attrs.foreground in 0..15 -> colorScheme.getColor(attrs.foreground)
@@ -118,7 +118,6 @@ fun TerminalLineView(
                     else -> colorScheme.foreground
                 }
 
-                // Determine background color
                 val bgColor = when {
                     attrs.inverse -> colorScheme.getColor(attrs.foreground)
                     attrs.background == 0 -> Color.Transparent
@@ -130,7 +129,7 @@ fun TerminalLineView(
                 val style = SpanStyle(
                     color = when {
                         attrs.hidden -> Color.Transparent
-                        attrs.dim -> fgColor.copy(alpha = 0.5f)
+                        attrs.dim -> fgColor.copy(alpha = 0.55f)
                         else -> fgColor
                     },
                     background = bgColor,
@@ -146,7 +145,9 @@ fun TerminalLineView(
                     }
                 )
 
-                append(AnnotatedString(terminalChar.char.toString(), style))
+                withStyle(style) {
+                    append(terminalChar.char.toString())
+                }
             }
         }
     }
@@ -155,48 +156,55 @@ fun TerminalLineView(
         text = annotatedString,
         fontFamily = FontFamily.Monospace,
         fontSize = fontSize.sp,
-        lineHeight = (fontSize * 1.4).sp,
-        modifier = Modifier.fillMaxWidth()
+        lineHeight = (fontSize * 1.32f).sp,
+        modifier = Modifier.fillMaxWidth(),
+        softWrap = false
     )
 }
 
-/**
- * Get 256-color palette color
- */
 private fun get256Color(index: Int): Color {
     return when {
         index < 16 -> {
-            // Standard colors (handled by colorScheme)
-            Color.White
+            when (index) {
+                0 -> Color(0xFF000000)
+                1 -> Color(0xFF800000)
+                2 -> Color(0xFF008000)
+                3 -> Color(0xFF808000)
+                4 -> Color(0xFF000080)
+                5 -> Color(0xFF800080)
+                6 -> Color(0xFF008080)
+                7 -> Color(0xFFC0C0C0)
+                8 -> Color(0xFF808080)
+                9 -> Color(0xFFFF0000)
+                10 -> Color(0xFF00FF00)
+                11 -> Color(0xFFFFFF00)
+                12 -> Color(0xFF0000FF)
+                13 -> Color(0xFFFF00FF)
+                14 -> Color(0xFF00FFFF)
+                else -> Color(0xFFFFFFFF)
+            }
         }
-        index < 232 -> {
-            // 216 color cube (6x6x6)
+
+        index in 16..231 -> {
             val i = index - 16
             val r = (i / 36) % 6
             val g = (i / 6) % 6
             val b = i % 6
+
+            fun level(value: Int): Float {
+                return if (value == 0) 0f else (55 + value * 40) / 255f
+            }
+
             Color(
-                red = if (r == 0) 0f else (55 + r * 40) / 255f,
-                green = if (g == 0) 0f else (55 + g * 40) / 255f,
-                blue = if (b == 0) 0f else (55 + b * 40) / 255f
+                red = level(r),
+                green = level(g),
+                blue = level(b)
             )
         }
+
         else -> {
-            // 24 grayscale colors
-            val gray = (index - 232) * 10 + 8
+            val gray = ((index - 232) * 10 + 8).coerceIn(0, 255)
             Color(gray / 255f, gray / 255f, gray / 255f)
         }
     }
-}
-
-fun printTerminalOutput(lines: List<TerminalLine>) {
-    val output = buildString {
-        lines.forEach { line ->
-            line.getChars().forEach { terminalChar ->
-                append(terminalChar.char)
-            }
-            append("\n") // newline at the end of each line
-        }
-    }
-    println("terminal_output: $output")
 }

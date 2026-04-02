@@ -172,18 +172,15 @@ object TerminalThemes {
         brightWhite = Color(0xFFFFFFFF)
     )
 
-    fun getByName(name: String): TerminalColorScheme {
-        return when (name.lowercase()) {
-            "monokai" -> Monokai
-            "dracula" -> Dracula
-            "nord" -> Nord
-            "solarized" -> Solarized
-            "material" -> Material
-            else -> Monokai
-        }
-    }
-
     val all = listOf(Monokai, Dracula, Nord, Solarized, Material)
+
+    fun getByName(name: String): TerminalColorScheme {
+        val normalizedName = name.lowercase()
+        return all.find { it.name.lowercase() == normalizedName }
+            ?: all.find { normalizedName.contains(it.name.lowercase()) }
+            ?: all.find { it.name.lowercase().contains(normalizedName) }
+            ?: Monokai
+    }
 }
 
 val LocalTerminalColorScheme = staticCompositionLocalOf { TerminalThemes.Monokai }
