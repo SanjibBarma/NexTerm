@@ -175,6 +175,7 @@ class TerminalSession(
         writeCommandLine(trimmed)
 
         if (handleBuiltInCommand(trimmed)) {
+            emulator.write("\r\n")
             writePrompt()
             return
         }
@@ -204,6 +205,7 @@ class TerminalSession(
                                 "\u001B[33m[exit code: ${result.exitCode}]\u001B[0m\r\n"
                             )
                         }
+                        emulator.write("\r\n")
                         writePrompt()
                     }
                 }

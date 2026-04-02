@@ -3,6 +3,8 @@ package com.nexterm.app.presentation.screens.main
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -10,7 +12,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,10 +23,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 import com.nexterm.app.ui.navigation.Screen
 import com.nexterm.app.ui.theme.TerminalColors
 
@@ -98,7 +101,6 @@ fun MainScreen(navController: NavController) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Hero Card
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -117,8 +119,7 @@ fun MainScreen(navController: NavController) {
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "The most powerful terminal emulator for Android. " +
-                                    "Develop, Learn, Deploy - All from your phone.",
+                            "The most powerful terminal emulator for Android. Develop, Learn, Deploy - All from your phone.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TerminalColors.MonokaiForeground.copy(alpha = 0.8f)
                         )
@@ -132,12 +133,12 @@ fun MainScreen(navController: NavController) {
                                 .padding(12.dp)
                         ) {
                             Column {
-                                TerminalLine("$ ", "pkg install python nodejs git", TerminalColors.MonokaiGreen)
-                                TerminalLine("", "Installing packages...", TerminalColors.MonokaiYellow)
-                                TerminalLine("$ ", "python --version", TerminalColors.MonokaiGreen)
-                                TerminalLine("", "Python 3.11.0", TerminalColors.MonokaiForeground)
-                                TerminalLine("$ ", "nginx start", TerminalColors.MonokaiGreen)
-                                TerminalLine("", "Server running on port 8080", TerminalColors.MonokaiCyan)
+                                TerminalPreviewLine("$ ", "pkg install python nodejs git", TerminalColors.MonokaiGreen)
+                                TerminalPreviewLine("", "Installing packages...", TerminalColors.MonokaiYellow)
+                                TerminalPreviewLine("$ ", "python --version", TerminalColors.MonokaiGreen)
+                                TerminalPreviewLine("", "Python 3.11.0", TerminalColors.MonokaiForeground)
+                                TerminalPreviewLine("$ ", "nginx start", TerminalColors.MonokaiGreen)
+                                TerminalPreviewLine("", "Server running on port 8080", TerminalColors.MonokaiCyan)
                             }
                         }
                     }
@@ -315,7 +316,7 @@ fun MainScreen(navController: NavController) {
 }
 
 @Composable
-fun TerminalLine(prompt: String, text: String, color: Color) {
+fun TerminalPreviewLine(prompt: String, text: String, color: Color) {
     Row {
         if (prompt.isNotEmpty()) {
             Text(
@@ -383,8 +384,7 @@ fun MainActionCard(
     }
 }
 
-// ✅ FIX: Use Material3 FlowRow directly with ExperimentalLayoutApi
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun CapabilityCard(
     icon: ImageVector,
@@ -435,8 +435,7 @@ fun CapabilityCard(
                     )
                 }
                 Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess
-                    else Icons.Default.ExpandMore,
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -444,7 +443,6 @@ fun CapabilityCard(
 
             if (expanded) {
                 Spacer(modifier = Modifier.height(12.dp))
-                // ✅ This is now androidx.compose.foundation.layout.FlowRow
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -467,8 +465,6 @@ fun CapabilityCard(
         }
     }
 }
-
-// ❌ DELETED: The custom FlowRow function that caused infinite recursion
 
 @Composable
 fun SystemInfoRow(label: String, value: String) {
@@ -583,9 +579,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
                         .padding(20.dp)
                 ) {
                     Text(
-                        "NexTerm হলো Android এর জন্য সবচেয়ে powerful ও professional terminal emulator। " +
-                                "এটি দিয়ে আপনি আপনার phone থেকেই full-scale development, server management, " +
-                                "penetration testing এবং আরও অনেক কিছু করতে পারবেন।",
+                        "NexTerm হলো Android এর জন্য সবচেয়ে powerful ও professional terminal emulator। এটি দিয়ে আপনি আপনার phone থেকেই full-scale development, server management, penetration testing এবং আরও অনেক কিছু করতে পারবেন।",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -771,6 +765,13 @@ fun AboutSection(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(bottom = 8.dp)
         ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 title,
                 fontWeight = FontWeight.Bold,
@@ -1123,5 +1124,13 @@ fun PackageItemCard(pkg: PackageItem) {
                 )
             }
         }
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+fun MainScreenPreview() {
+    MaterialTheme {
+        MainScreen(navController = rememberNavController())
     }
 }

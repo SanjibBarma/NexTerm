@@ -7,6 +7,7 @@ class TerminalBuffer(
     private var cols: Int
 ) {
     internal val lines: MutableList<TerminalLine> = MutableList(rows) { TerminalLine(cols) }
+
     private var scrollTop = 0
     private var scrollBottom = rows - 1
 
@@ -28,14 +29,21 @@ class TerminalBuffer(
         return if (row in 0 until rows) lines[row] else null
     }
 
-    fun getLines(): List<TerminalLine> = lines.toList()
+    fun getLines(): List<TerminalLine> = lines.map { it.copy() }
 
+    /**
+     * Returns the visible screen lines.
+     * Keeps at least one line.
+     * Keeps trailing prompt line if present.
+     */
     fun getDisplayLines(): List<TerminalLine> {
+        if (lines.isEmpty()) return listOf(TerminalLine(cols))
+
         val lastNonEmptyIndex = lines.indexOfLast { !it.isBlank() }
-        return if (lastNonEmptyIndex == -1) {
-            listOf(TerminalLine(cols))
-        } else {
-            lines.take(lastNonEmptyIndex + 1).map { it.copy() }
+
+        return when {
+            lastNonEmptyIndex == -1 -> listOf(TerminalLine(cols))
+            else -> lines.take(lastNonEmptyIndex + 1).map { it.copy() }
         }
     }
 
@@ -44,25 +52,32 @@ class TerminalBuffer(
     }
 
     fun clearRange(startRow: Int, startCol: Int, endRow: Int, endCol: Int) {
-        for (row in startRow..endRow.coerceAtMost(rows - 1)) {
-            val start = if (row == startRow) startCol else 0
-            val end = if (row == endRow) endCol else cols - 1
-            for (col in start..end.coerceAtMost(cols - 1)) {
+        val safeStartRow = startRow.coerceIn(0, rows - 1)
+        val safeEndRow = endRow.coerceIn(0, rows - 1)
+
+        for (row in safeStartRow..safeEndRow) {
+            val start = if (row == safeStartRow) startCol.coerceAtLeast(0) else 0
+            val end = if (row == safeEndRow) endCol.coerceAtMost(cols - 1) else cols - 1
+
+            for (col in start..end) {
                 lines[row].setChar(col, TerminalChar(' ', CharacterAttributes()))
             }
         }
     }
 
     fun clearLine(row: Int, startCol: Int, endCol: Int) {
-        if (row in 0 until rows) {
-            for (col in startCol..endCol.coerceAtMost(cols - 1)) {
-                lines[row].setChar(col, TerminalChar(' ', CharacterAttributes()))
-            }
+        if (row !in 0 until rows) return
+
+        val safeStart = startCol.coerceIn(0, cols - 1)
+        val safeEnd = endCol.coerceIn(0, cols - 1)
+
+        for (col in safeStart..safeEnd) {
+            lines[row].setChar(col, TerminalChar(' ', CharacterAttributes()))
         }
     }
 
     fun scrollUp(count: Int = 1) {
-        repeat(count) {
+        repeat(count.coerceAtLeast(0)) {
             for (row in scrollTop until scrollBottom) {
                 lines[row] = lines[row + 1].copy()
             }
@@ -71,7 +86,7 @@ class TerminalBuffer(
     }
 
     fun scrollDown(count: Int = 1) {
-        repeat(count) {
+        repeat(count.coerceAtLeast(0)) {
             for (row in scrollBottom downTo scrollTop + 1) {
                 lines[row] = lines[row - 1].copy()
             }
@@ -143,6 +158,8 @@ class TerminalLine(private val cols: Int) {
     }
 
     fun getText(): String = chars.joinToString("") { it.char.toString() }
+
+    fun getTrimmedText(): String = getText().trimEnd()
 
     fun getChars(): List<TerminalChar> = chars.toList()
 

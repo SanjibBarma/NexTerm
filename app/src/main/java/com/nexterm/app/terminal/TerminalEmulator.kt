@@ -225,7 +225,10 @@ class TerminalEmulator(
         if (cursor.row >= rows - 1) {
             scroll()
         } else {
-            _cursorPosition.value = cursor.copy(row = cursor.row + 1, col = 0)
+            _cursorPosition.value = cursor.copy(
+                row = cursor.row + 1,
+                col = 0
+            )
         }
     }
 
@@ -247,7 +250,7 @@ class TerminalEmulator(
     }
 
     private fun bell() {
-        // no-op
+        // optional bell hook
     }
 
     private fun reverseIndex() {
@@ -260,6 +263,7 @@ class TerminalEmulator(
         _cursorPosition.value = CursorPosition(0, 0)
         currentAttributes = CharacterAttributes()
         savedCursorPosition = CursorPosition(0, 0)
+        scrollbackBuffer.clear()
         updateScreen()
     }
 
@@ -280,27 +284,37 @@ class TerminalEmulator(
     }
 
     private fun updateScreen() {
-        _screenContent.value = _buffer.value.getDisplayLines()
+        val visibleLines = _buffer.value.getDisplayLines()
+
+        val combinedLines = buildList {
+            addAll(scrollbackBuffer.map { it.copy() })
+            addAll(visibleLines.map { it.copy() })
+        }
+
+        _screenContent.value = combinedLines.takeLast(maxScrollback + rows)
     }
 
     fun resize(newRows: Int, newCols: Int) {
         rows = newRows
         cols = newCols
+
         _buffer.value = _buffer.value.resize(newRows, newCols)
         _cursorPosition.value = CursorPosition(
             row = _cursorPosition.value.row.coerceIn(0, newRows - 1),
             col = _cursorPosition.value.col.coerceIn(0, newCols - 1)
         )
+
         updateScreen()
     }
 
     fun getScrollbackHistory(): List<TerminalLine> = scrollbackBuffer.toList()
 
     fun setMaxScrollback(lines: Int) {
-        maxScrollback = lines
+        maxScrollback = lines.coerceAtLeast(100)
         while (scrollbackBuffer.size > maxScrollback) {
             scrollbackBuffer.removeAt(0)
         }
+        updateScreen()
     }
 }
 
