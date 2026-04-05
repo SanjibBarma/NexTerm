@@ -9,6 +9,7 @@ import com.nexterm.app.data.repository.SettingsRepository
 import com.nexterm.app.terminal.TerminalSession
 import com.nexterm.app.terminal.TerminalSessionManager
 import com.nexterm.app.terminal.buffer.TerminalLine
+import com.nexterm.app.package_manager.PackageManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,7 +22,8 @@ import kotlinx.coroutines.launch
 class TerminalViewModel(
     private val sessionManager: TerminalSessionManager,
     private val sessionRepository: SessionRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val packageManager: PackageManager
 ) : ViewModel() {
 
     val settings: StateFlow<TerminalSettings> = settingsRepository.terminalSettings
@@ -191,8 +193,27 @@ class TerminalViewModel(
         val trimmed = command.trim()
         if (trimmed.isEmpty()) return
 
+        Log.e("NexTerm-LOG", ">>> [NexTerm-COMMAND]: $trimmed")
+
         viewModelScope.launch {
             val session = _currentSession.value ?: return@launch
+
+            // REAL PKG INTERCEPTION
+            if (trimmed.startsWith("pkg install ") || trimmed.startsWith("pkg i ")) {
+                _isCurrentSessionRunning.value = true
+                val pkgName = trimmed.substringAfter("install ").substringAfter("i ").trim()
+                session.writeToEmulator("\r\n\u001B[33m[*] NexTerm: Initializing installation for $pkgName...\u001B[0m\r\n")
+                
+                val result = packageManager.install(pkgName)
+                if (result.isSuccess) {
+                    session.writeToEmulator("\u001B[32m[+] $pkgName is now functional!\u001B[0m\r\n")
+                } else {
+                    session.writeToEmulator("\u001B[31m[!] Error: ${result.exceptionOrNull()?.message}\u001B[0m\r\n")
+                }
+                session.sendKey("ENTER")
+                _isCurrentSessionRunning.value = false
+                return@launch
+            }
 
             Log.e("TerminalViewModel", "executeCommand: $trimmed")
             session.executeCommand(trimmed)
@@ -257,7 +278,6 @@ class TerminalViewModel(
             session.screenContent.collect { content ->
                 val snapshot = content.map { it.copy() }
 
-                Log.e("TerminalViewModel", "Collected screen content size=${snapshot.size}")
                 snapshot.forEachIndexed { index, line ->
                     Log.e("TerminalViewModel", "VM line[$index]=${line.getText()}")
                 }

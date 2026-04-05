@@ -18,13 +18,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexterm.app.ui.theme.TerminalColorScheme
 import com.nexterm.app.ui.theme.TerminalThemes
+import com.nexterm.app.ui.theme.TerminalColors
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,6 +38,8 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit
 ) {
     val settings by viewModel.settings.collectAsState()
+    val hackerGreen = TerminalColors.MonokaiGreen
+    val hackerBlack = Color.Black
 
     var showFontSizeDialog by remember { mutableStateOf(false) }
     var showScrollbackDialog by remember { mutableStateOf(false) }
@@ -42,547 +48,189 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text("SYS_CONFIGURATION", color = hackerGreen, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                }
+                    IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, null, tint = hackerGreen) }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = hackerBlack)
             )
-        }
+        },
+        containerColor = hackerBlack
     ) { paddingValues ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item { HackerSettingsHeader("APPEARANCE_MODULE", Icons.Default.Palette, hackerGreen) }
             item {
-                SettingsSectionHeader(title = "Appearance", icon = Icons.Default.Palette)
-            }
-
-            item {
-                SettingsCard {
-                    SettingsItem(
-                        title = "Font Size",
-                        subtitle = "${settings.fontSize}sp",
-                        icon = Icons.Default.FormatSize,
-                        onClick = { showFontSizeDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                    Column(
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.ColorLens,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text(
-                                "Color Scheme",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                HackerSettingsCard(hackerGreen) {
+                    HackerSettingsItem("Font Size", "${settings.fontSize}sp", Icons.Default.FormatSize, hackerGreen) { showFontSizeDialog = true }
+                    HorizontalDivider(color = hackerGreen.copy(0.1f), modifier = Modifier.padding(horizontal = 16.dp))
+                    Column(Modifier.padding(16.dp)) {
+                        Text("COLOR_SCHEME_IDENTIFIER", color = hackerGreen, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                        Spacer(Modifier.height(12.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(TerminalThemes.all) { theme ->
-                                ColorSchemeChip(
-                                    theme = theme,
-                                    isSelected = settings.colorScheme.trim().lowercase() == theme.key,
-                                    onClick = {
-                                        viewModel.updateColorScheme(theme.key)
-                                    }
-                                )
+                                ColorSchemeChip(theme, settings.colorScheme.trim().lowercase() == theme.key) { viewModel.updateColorScheme(theme.key) }
                             }
                         }
                     }
                 }
             }
 
+            item { HackerSettingsHeader("CORE_ENGINE_PREFS", Icons.Default.Terminal, hackerGreen) }
             item {
-                SettingsSectionHeader(title = "Terminal", icon = Icons.Default.Terminal)
-            }
-
-            item {
-                SettingsCard {
-                    SettingsSwitchItem(
-                        title = "Cursor Blink",
-                        subtitle = "Animate the cursor",
-                        icon = Icons.Default.Animation,
-                        checked = settings.cursorBlink,
-                        onCheckedChange = { viewModel.updateCursorBlink(it) }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                    SettingsItem(
-                        title = "Scrollback Buffer",
-                        subtitle = "${settings.scrollbackLines} lines",
-                        icon = Icons.Default.History,
-                        onClick = { showScrollbackDialog = true }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                    SettingsSwitchItem(
-                        title = "Keep Screen On",
-                        subtitle = "Prevent screen from sleeping",
-                        icon = Icons.Default.Visibility,
-                        checked = settings.keepScreenOn,
-                        onCheckedChange = { viewModel.updateKeepScreenOn(it) }
-                    )
+                HackerSettingsCard(hackerGreen) {
+                    HackerSettingsSwitch("Cursor Blink", "ANIM_CUR", Icons.Default.Animation, settings.cursorBlink, hackerGreen) { viewModel.updateCursorBlink(it) }
+                    HorizontalDivider(color = hackerGreen.copy(0.1f), modifier = Modifier.padding(horizontal = 16.dp))
+                    HackerSettingsItem("Scrollback Buffer", "${settings.scrollbackLines} lines", Icons.Default.History, hackerGreen) { showScrollbackDialog = true }
+                    HorizontalDivider(color = hackerGreen.copy(0.1f), modifier = Modifier.padding(horizontal = 16.dp))
+                    HackerSettingsSwitch("Keep Screen On", "PWR_MGMT", Icons.Default.Visibility, settings.keepScreenOn, hackerGreen) { viewModel.updateKeepScreenOn(it) }
                 }
             }
 
+            item { HackerSettingsHeader("INPUT_INTERFACE", Icons.Default.Keyboard, hackerGreen) }
             item {
-                SettingsSectionHeader(title = "Extra Keys", icon = Icons.Default.Keyboard)
-            }
-
-            item {
-                SettingsCard {
-                    SettingsSwitchItem(
-                        title = "Extra Keys Bar",
-                        subtitle = "Show additional keys above keyboard",
-                        icon = Icons.Default.KeyboardArrowUp,
-                        checked = settings.extraKeysEnabled,
-                        onCheckedChange = { viewModel.updateExtraKeysEnabled(it) }
-                    )
-
+                HackerSettingsCard(hackerGreen) {
+                    HackerSettingsSwitch("Extra Keys Bar", "UI_EXT", Icons.Default.KeyboardArrowUp, settings.extraKeysEnabled, hackerGreen) { viewModel.updateExtraKeysEnabled(it) }
                     if (settings.extraKeysEnabled) {
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                        SettingsItem(
-                            title = "Configure Keys",
-                            subtitle = "Customize extra keys",
-                            icon = Icons.Default.Settings,
-                            onClick = { showExtraKeysDialog = true }
-                        )
+                        HorizontalDivider(color = hackerGreen.copy(0.1f), modifier = Modifier.padding(horizontal = 16.dp))
+                        HackerSettingsItem("Configure Mapping", "KEY_MAP", Icons.Default.Settings, hackerGreen) { showExtraKeysDialog = true }
                     }
                 }
             }
 
+            item { HackerSettingsHeader("SYSTEM_INFO", Icons.Default.Info, hackerGreen) }
             item {
-                SettingsSectionHeader(title = "About", icon = Icons.Default.Info)
-            }
-
-            item {
-                SettingsCard {
-                    SettingsItem(
-                        title = "Version",
-                        subtitle = "1.0.0",
-                        icon = Icons.Default.Verified,
-                        onClick = { }
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-
-                    SettingsItem(
-                        title = "NexTerm",
-                        subtitle = "Professional Terminal Emulator",
-                        icon = Icons.Default.Code,
-                        onClick = { }
-                    )
+                HackerSettingsCard(hackerGreen) {
+                    HackerSettingsItem("NexTerm Build", "1.0.0-STABLE", Icons.Default.Verified, hackerGreen) { }
+                    HorizontalDivider(color = hackerGreen.copy(0.1f), modifier = Modifier.padding(horizontal = 16.dp))
+                    HackerSettingsItem("Status", "ANONYMOUS_ENABLED", Icons.Default.Code, hackerGreen) { }
                 }
             }
-
-            item {
-                Spacer(modifier = Modifier.height(32.dp))
-            }
+            
+            item { Spacer(Modifier.height(32.dp)) }
         }
     }
 
     if (showFontSizeDialog) {
-        FontSizeDialog(
-            currentSize = settings.fontSize,
-            onDismiss = { showFontSizeDialog = false },
-            onConfirm = { size ->
-                viewModel.updateFontSize(size)
-                showFontSizeDialog = false
-            }
-        )
+        FontSizeDialog(settings.fontSize, { showFontSizeDialog = false }) { viewModel.updateFontSize(it); showFontSizeDialog = false }
     }
-
     if (showScrollbackDialog) {
-        ScrollbackDialog(
-            currentLines = settings.scrollbackLines,
-            onDismiss = { showScrollbackDialog = false },
-            onConfirm = { lines ->
-                viewModel.updateScrollbackLines(lines)
-                showScrollbackDialog = false
-            }
-        )
+        ScrollbackDialog(settings.scrollbackLines, { showScrollbackDialog = false }) { viewModel.updateScrollbackLines(it); showScrollbackDialog = false }
     }
-
     if (showExtraKeysDialog) {
-        ExtraKeysDialog(
-            currentKeys = settings.extraKeysRow,
-            onDismiss = { showExtraKeysDialog = false },
-            onConfirm = { keys ->
-                viewModel.updateExtraKeysRow(keys)
-                showExtraKeysDialog = false
-            }
-        )
+        ExtraKeysDialog(settings.extraKeysRow, { showExtraKeysDialog = false }) { viewModel.updateExtraKeysRow(it); showExtraKeysDialog = false }
     }
 }
 
 @Composable
-fun SettingsSectionHeader(
-    title: String,
-    icon: ImageVector
-) {
-    Row(
-        modifier = Modifier.padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold
-        )
+fun HackerSettingsHeader(title: String, icon: ImageVector, color: Color) {
+    Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(title, color = color, fontFamily = FontFamily.Monospace, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-fun SettingsCard(
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    ) {
-        Column {
-            content()
+fun HackerSettingsCard(color: Color, content: @Composable ColumnScope.() -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().border(0.5.dp, color.copy(0.2f), RoundedCornerShape(12.dp)), colors = CardDefaults.cardColors(containerColor = Color(0xFF080808))) {
+        Column { content() }
+    }
+}
+
+@Composable
+fun HackerSettingsItem(title: String, subtitle: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = color.copy(0.7f), modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+            Text(subtitle, color = Color.Gray, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
         }
+        Icon(Icons.Default.ChevronRight, null, tint = Color.DarkGray)
     }
 }
 
 @Composable
-fun SettingsItem(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+fun HackerSettingsSwitch(title: String, code: String, icon: ImageVector, checked: Boolean, color: Color, onCheckedChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onCheckedChange(!checked) }.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = color.copy(0.7f), modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+            Text("TAG: $code", color = color.copy(0.4f), fontFamily = FontFamily.Monospace, fontSize = 9.sp)
         }
-        Icon(
-            Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Switch(checked = checked, onCheckedChange = onCheckedChange, colors = SwitchDefaults.colors(checkedThumbColor = color, checkedTrackColor = color.copy(0.3f), uncheckedThumbColor = Color.DarkGray))
     }
 }
 
 @Composable
-fun SettingsSwitchItem(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange
-        )
+fun ColorSchemeChip(theme: TerminalColorScheme, isSelected: Boolean, onClick: () -> Unit) {
+    val hackerGreen = TerminalColors.MonokaiGreen
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).border(if (isSelected) 1.dp else 0.dp, hackerGreen, RoundedCornerShape(8.dp)).background(if (isSelected) Color(0xFF0F0F0F) else Color.Transparent).padding(8.dp)) {
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(4.dp)).background(theme.background).border(0.5.dp, Color.Gray, RoundedCornerShape(4.dp)))
+        Spacer(Modifier.height(4.dp))
+        Text(theme.name.uppercase(), color = if (isSelected) hackerGreen else Color.Gray, fontSize = 8.sp, fontFamily = FontFamily.Monospace)
     }
 }
 
 @Composable
-fun ColorSchemeChip(
-    theme: TerminalColorScheme,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .then(
-                if (isSelected) {
-                    Modifier.border(
-                        2.dp,
-                        MaterialTheme.colorScheme.primary,
-                        RoundedCornerShape(12.dp)
-                    )
-                } else Modifier
-            )
-            .padding(8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(theme.background)
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            listOf(
-                theme.red,
-                theme.green,
-                theme.yellow,
-                theme.blue
-            ).forEach { color ->
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(color)
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = theme.name,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (isSelected) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@Composable
-fun FontSizeDialog(
-    currentSize: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit
-) {
-    var size by remember { mutableFloatStateOf(currentSize.toFloat()) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Font Size") },
+fun FontSizeDialog(current: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+    var size by remember { mutableFloatStateOf(current.toFloat()) }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = Color.Black, modifier = Modifier.border(1.dp, TerminalColors.MonokaiGreen, RoundedCornerShape(28.dp)),
+        title = { Text("FONT_SIZE_PX", color = TerminalColors.MonokaiGreen, fontFamily = FontFamily.Monospace) },
         text = {
             Column {
-                Text(
-                    "Preview",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF272822))
-                        .padding(12.dp)
-                ) {
-                    Text(
-                        "$ echo \"Hello, World!\"",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = size.sp,
-                        color = Color(0xFFA6E22E)
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "${size.toInt()}sp",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
-                Slider(
-                    value = size,
-                    onValueChange = { size = it },
-                    valueRange = 8f..24f,
-                    steps = 15
-                )
+                Text("PREVIEW:", color = Color.Gray, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                Text("echo 'Hello Operator'", color = Color.White, fontSize = size.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(vertical = 12.dp))
+                Slider(value = size, onValueChange = { size = it }, valueRange = 10f..24f, colors = SliderDefaults.colors(thumbColor = TerminalColors.MonokaiGreen, activeTrackColor = TerminalColors.MonokaiGreen))
             }
         },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(size.toInt()) }) {
-                Text("OK")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
+        confirmButton = { TextButton(onClick = { onConfirm(size.toInt()) }) { Text("SET", color = TerminalColors.MonokaiGreen, fontFamily = FontFamily.Monospace) } }
     )
 }
 
 @Composable
-fun ScrollbackDialog(
-    currentLines: Int,
-    onDismiss: () -> Unit,
-    onConfirm: (Int) -> Unit
-) {
-    val options = listOf(1000, 5000, 10000, 25000, 50000)
-    var selected by remember { mutableIntStateOf(currentLines) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Scrollback Buffer") },
+fun ScrollbackDialog(current: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+    val options = listOf(1000, 5000, 10000, 25000)
+    var selected by remember { mutableIntStateOf(current) }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = Color.Black, modifier = Modifier.border(1.dp, TerminalColors.MonokaiGreen, RoundedCornerShape(28.dp)),
+        title = { Text("BUFFER_CAPACITY", color = TerminalColors.MonokaiGreen, fontFamily = FontFamily.Monospace) },
         text = {
             Column {
-                Text(
-                    "Number of lines to keep in scrollback",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                options.forEach { lines ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { selected = lines }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selected == lines,
-                            onClick = { selected = lines }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("$lines lines")
+                options.forEach { opt ->
+                    Row(Modifier.fillMaxWidth().clickable { selected = opt }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = selected == opt, onClick = { selected = opt }, colors = RadioButtonDefaults.colors(selectedColor = TerminalColors.MonokaiGreen))
+                        Text("$opt lines", color = Color.White, fontFamily = FontFamily.Monospace)
                     }
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(selected) }) {
-                Text("OK")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
+        confirmButton = { TextButton(onClick = { onConfirm(selected) }) { Text("APPLY", color = TerminalColors.MonokaiGreen, fontFamily = FontFamily.Monospace) } }
     )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ExtraKeysDialog(
-    currentKeys: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var keys by remember { mutableStateOf(currentKeys) }
-
-    val availableKeys = listOf(
-        "ESC", "TAB", "CTRL", "ALT", "FN",
-        "HOME", "END", "PGUP", "PGDN",
-        "UP", "DOWN", "LEFT", "RIGHT",
-        "DEL", "INS"
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Configure Extra Keys") },
+fun ExtraKeysDialog(current: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var keys by remember { mutableStateOf(current) }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = Color.Black, modifier = Modifier.border(1.dp, TerminalColors.MonokaiGreen, RoundedCornerShape(28.dp)),
+        title = { Text("KEY_MAPPING", color = TerminalColors.MonokaiGreen, fontFamily = FontFamily.Monospace) },
         text = {
             Column {
-                Text(
-                    "Enter keys separated by |",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = keys,
-                    onValueChange = { keys = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = FontFamily.Monospace
-                    )
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "Available Keys:",
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    availableKeys.forEach { key ->
-                        SuggestionChip(
-                            onClick = {
-                                keys = if (keys.isEmpty()) key else "$keys|$key"
-                            },
-                            label = { Text(key, style = MaterialTheme.typography.labelSmall) }
-                        )
+                OutlinedTextField(value = keys, onValueChange = { keys = it }, modifier = Modifier.fillMaxWidth(), textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = TerminalColors.MonokaiGreen, unfocusedBorderColor = Color.DarkGray))
+                Spacer(Modifier.height(12.dp))
+                Text("SYMBOLS:", color = Color.Gray, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("ESC", "TAB", "CTRL", "ALT", "UP", "DOWN").forEach { k ->
+                        SuggestionChip(onClick = { keys += "|$k" }, label = { Text(k, fontSize = 9.sp, fontFamily = FontFamily.Monospace) })
                     }
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(keys) }) {
-                Text("OK")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        }
+        confirmButton = { TextButton(onClick = { onConfirm(keys) }) { Text("COMMIT", color = TerminalColors.MonokaiGreen, fontFamily = FontFamily.Monospace) } }
     )
 }

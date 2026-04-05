@@ -12,26 +12,57 @@ class BinaryInstaller(private val context: Context) {
     private val versionFile = File(markerDir, "binary_version.txt")
     private val abiFile = File(markerDir, "binary_abi.txt")
 
-    fun installOrUpdateIfNeeded(manifest: BinaryManifest): Result<Boolean> {
+    fun installTermuxBootstrap(info: TermuxBootstrapInfo): Result<Boolean> {
         return runCatching {
             ensureBaseDirs()
-
-            val installedVersion = versionFile.takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull()
-            val installedAbi = abiFile.takeIf { it.exists() }?.readText()?.trim()
-
-            val needsInstall = installedVersion != manifest.version || installedAbi != manifest.abi
-
-            if (!needsInstall) {
+            
+            val usrDir = File(root, "usr")
+            // Check if bootstrap is already installed
+            if (File(usrDir, "bin/bash").exists() || File(usrDir, "bin/sh").exists()) {
                 return@runCatching false
             }
 
-            installManifest(manifest)
-
-            versionFile.writeText(manifest.version.toString())
-            abiFile.writeText(manifest.abi)
-
+            downloadAndExtractZip(info.bootstrapUrl, root)
+            
+            // Mark as installed
+            versionFile.writeText(info.version.toString())
+            abiFile.writeText(info.arch)
+            
             true
         }
+    }
+
+    private fun downloadAndExtractZip(urlString: String, targetDir: File) {
+        val url = java.net.URL(urlString)
+        val connection = url.openConnection() as java.net.HttpURLConnection
+        connection.connect()
+
+        if (connection.responseCode != java.net.HttpURLConnection.HTTP_OK) {
+            throw Exception("Failed to download bootstrap: ${connection.responseCode}")
+        }
+
+        java.util.zip.ZipInputStream(connection.inputStream).use { zis ->
+            var entry = zis.nextEntry
+            while (entry != null) {
+                val newFile = File(targetDir, entry.name)
+                if (entry.isDirectory) {
+                    newFile.mkdirs()
+                } else {
+                    newFile.parentFile?.mkdirs()
+                    java.io.FileOutputStream(newFile).use { fos ->
+                        zis.copyTo(fos)
+                    }
+                    // Termux binaries need execution permissions
+                    if (newFile.absolutePath.contains("/bin/") || newFile.absolutePath.contains("/lib/")) {
+                        newFile.setExecutable(true, false)
+                        newFile.setReadable(true, false)
+                    }
+                }
+                zis.closeEntry()
+                entry = zis.nextEntry
+            }
+        }
+        connection.disconnect()
     }
 
     private fun ensureBaseDirs() {

@@ -22,6 +22,7 @@ val appModule = module {
     single { BinaryInstaller(get()) }
     single { BinaryCommandResolver(get()) }
     single { BootstrapManager(get()) }
+    single { com.nexterm.app.package_manager.PackageManager(androidContext()) }
 
     single {
         Room.databaseBuilder(

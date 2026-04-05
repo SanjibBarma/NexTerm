@@ -9,9 +9,30 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import com.nexterm.app.package_manager.PackageInfo
+import com.nexterm.app.package_manager.PackageManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
 class SettingsViewModel(
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val packageManager: PackageManager
 ) : ViewModel() {
+
+    private val _availablePackages = MutableStateFlow<List<PackageInfo>>(emptyList())
+    val availablePackages = _availablePackages.asStateFlow()
+
+    init {
+        loadPackages()
+    }
+
+    private fun loadPackages() {
+        _availablePackages.value = packageManager.listAvailable().values.toList()
+    }
+
+    fun isInstalled(packageName: String): Boolean {
+        return packageManager.isInstalled(packageName)
+    }
 
     val settings: StateFlow<TerminalSettings> = settingsRepository.terminalSettings
         .stateIn(

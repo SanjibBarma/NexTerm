@@ -7,7 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.nexterm.app.presentation.screens.main.MainScreen
+import com.nexterm.app.ui.screens.main.MainScreen
 import com.nexterm.app.ui.screens.terminal.TerminalScreen
 import com.nexterm.app.ui.screens.files.FilesScreen
 import com.nexterm.app.ui.screens.settings.SettingsScreen

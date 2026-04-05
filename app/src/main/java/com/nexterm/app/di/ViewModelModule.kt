@@ -7,7 +7,7 @@ import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
 
 val viewModelModule = module {
-    viewModel { TerminalViewModel(get(), get(), get()) }
+    viewModel { TerminalViewModel(get(), get(), get(), get()) }
     viewModel { FilesViewModel(get()) }
-    viewModel { SettingsViewModel(get()) }
+    viewModel { SettingsViewModel(get(), get()) }
 }
