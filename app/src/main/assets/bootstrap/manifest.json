@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "abis": {
+    "arm64-v8a": {
+      "files": [
+        { "path": "bootstrap/arm64-v8a/bin/busybox", "targetDir": "usr/bin", "executable": true },
+        { "path": "bootstrap/arm64-v8a/bin/toybox", "targetDir": "usr/bin", "executable": true }
+      ]
+    }
+  }
+}

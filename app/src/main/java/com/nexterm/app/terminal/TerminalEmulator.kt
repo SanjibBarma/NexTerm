@@ -1,5 +1,6 @@
 package com.nexterm.app.terminal
 
+import android.util.Log
 import com.nexterm.app.terminal.ansi.AnsiParser
 import com.nexterm.app.terminal.buffer.TerminalBuffer
 import com.nexterm.app.terminal.buffer.TerminalLine
@@ -32,13 +33,28 @@ class TerminalEmulator(
     }
 
     fun write(data: String) {
+        Log.e("TerminalEmulator", "write called with=[$data]")
+
         val parsedSequences = ansiParser.parse(data)
+        Log.e("TerminalEmulator", "parsed sequence count=${parsedSequences.size}")
 
         parsedSequences.forEach { sequence ->
             when (sequence) {
-                is AnsiParser.ParsedSequence.Text -> writeText(sequence.text)
-                is AnsiParser.ParsedSequence.ControlCode -> handleControlCode(sequence.code)
-                is AnsiParser.ParsedSequence.EscapeSequence -> handleEscapeSequence(sequence)
+                is AnsiParser.ParsedSequence.Text -> {
+                    Log.e("TerminalEmulator", "Parsed Text=[${sequence.text}]")
+                    writeText(sequence.text)
+                }
+                is AnsiParser.ParsedSequence.ControlCode -> {
+                    Log.e("TerminalEmulator", "Parsed ControlCode=[${sequence.code.code}]")
+                    handleControlCode(sequence.code)
+                }
+                is AnsiParser.ParsedSequence.EscapeSequence -> {
+                    Log.e(
+                        "TerminalEmulator",
+                        "Parsed EscapeSequence type=${sequence.type} params=${sequence.params}"
+                    )
+                    handleEscapeSequence(sequence)
+                }
             }
         }
 
@@ -249,9 +265,7 @@ class TerminalEmulator(
         }
     }
 
-    private fun bell() {
-        // optional bell hook
-    }
+    private fun bell() {}
 
     private fun reverseIndex() {
         val cursor = _cursorPosition.value
@@ -289,12 +303,19 @@ class TerminalEmulator(
         val combinedLines = buildList {
             addAll(scrollbackBuffer.map { it.copy() })
             addAll(visibleLines.map { it.copy() })
-        }
+        }.map { it.copy() }
 
         _screenContent.value = combinedLines.takeLast(maxScrollback + rows)
+
+        Log.e("TerminalEmulator", "updateScreen size=${_screenContent.value.size}")
+        _screenContent.value.forEachIndexed { index, line ->
+            Log.e("TerminalEmulator", "screen[$index]=${line.getText()}")
+        }
     }
 
     fun resize(newRows: Int, newCols: Int) {
+        Log.e("TerminalEmulator", "resize newRows=$newRows newCols=$newCols")
+
         rows = newRows
         cols = newCols
 
@@ -307,7 +328,7 @@ class TerminalEmulator(
         updateScreen()
     }
 
-    fun getScrollbackHistory(): List<TerminalLine> = scrollbackBuffer.toList()
+    fun getScrollbackHistory(): List<TerminalLine> = scrollbackBuffer.map { it.copy() }
 
     fun setMaxScrollback(lines: Int) {
         maxScrollback = lines.coerceAtLeast(100)

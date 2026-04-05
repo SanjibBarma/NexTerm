@@ -31,11 +31,6 @@ class TerminalBuffer(
 
     fun getLines(): List<TerminalLine> = lines.map { it.copy() }
 
-    /**
-     * Returns the visible screen lines.
-     * Keeps at least one line.
-     * Keeps trailing prompt line if present.
-     */
     fun getDisplayLines(): List<TerminalLine> {
         if (lines.isEmpty()) return listOf(TerminalLine(cols))
 
@@ -161,7 +156,7 @@ class TerminalLine(private val cols: Int) {
 
     fun getTrimmedText(): String = getText().trimEnd()
 
-    fun getChars(): List<TerminalChar> = chars.toList()
+    fun getChars(): List<TerminalChar> = chars.map { it.copy() }
 
     fun isBlank(): Boolean = chars.all { it.char == ' ' }
 }

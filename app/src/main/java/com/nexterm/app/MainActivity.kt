@@ -37,7 +37,6 @@ class MainActivity : ComponentActivity() {
         }
     }.toTypedArray()
 
-    // ✅ Modern Activity Result API for permissions
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -49,7 +48,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ✅ Modern Activity Result API for MANAGE_EXTERNAL_STORAGE (replaces deprecated onActivityResult)
     private val manageStorageLauncher: ActivityResultLauncher<Intent> = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
@@ -108,13 +106,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showManageStorageDialog() {
-        // ✅ Using android.app.AlertDialog.Builder (NOT Compose AlertDialog)
         android.app.AlertDialog.Builder(this)
             .setTitle("Storage Permission Required")
             .setMessage(
                 "NexTerm needs full storage access to manage files, " +
-                        "install packages, and run commands from any directory." +
-                        "\n\nTap 'Allow' to grant permission."
+                        "work with local project folders, and access directories outside app sandbox."
             )
             .setPositiveButton("Allow") { dialog, _ ->
                 dialog.dismiss()
@@ -123,12 +119,11 @@ class MainActivity : ComponentActivity() {
                         data = Uri.parse("package:$packageName")
                     }
                     manageStorageLauncher.launch(intent)
-                } catch (e: Exception) {
-                    // Fallback: some devices don't support the specific intent
+                } catch (_: Exception) {
                     try {
                         val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
                         manageStorageLauncher.launch(intent)
-                    } catch (e2: Exception) {
+                    } catch (_: Exception) {
                         Toast.makeText(
                             this,
                             "Please grant storage permission manually in Settings",
@@ -142,7 +137,7 @@ class MainActivity : ComponentActivity() {
                 dialog.dismiss()
                 Toast.makeText(
                     this,
-                    "Some features will be limited without storage access",
+                    "Some file features will be limited without storage access",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -154,8 +149,7 @@ class MainActivity : ComponentActivity() {
         android.app.AlertDialog.Builder(this)
             .setTitle("Permissions Needed")
             .setMessage(
-                "NexTerm requires storage and notification permissions " +
-                        "to work properly.\n\nPlease grant them in settings."
+                "NexTerm requires storage and notification permissions to work properly.\n\nPlease grant them in settings."
             )
             .setPositiveButton("Open Settings") { dialog, _ ->
                 dialog.dismiss()
@@ -173,7 +167,7 @@ class MainActivity : ComponentActivity() {
                 data = Uri.parse("package:$packageName")
             }
             startActivity(intent)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             val intent = Intent(Settings.ACTION_SETTINGS)
             startActivity(intent)
         }

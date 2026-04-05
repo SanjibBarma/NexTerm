@@ -1,5 +1,6 @@
 package com.nexterm.app.ui.screens.terminal
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -57,6 +57,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -66,6 +67,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -79,10 +82,12 @@ import com.nexterm.app.ui.components.TerminalOutputView
 import com.nexterm.app.ui.theme.LocalTerminalColorScheme
 import com.nexterm.app.ui.theme.TerminalColorScheme
 import com.nexterm.app.ui.theme.TerminalThemes
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.koin.androidx.compose.koinViewModel
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,8 +102,14 @@ fun TerminalScreen(
     val currentSession by viewModel.currentSession.collectAsState()
     val sessions by viewModel.sessions.collectAsState()
     val screenContent by viewModel.screenContent.collectAsState()
+
+    Log.e("TerminalScreen", "screenContent size=${screenContent.size}")
+    screenContent.forEachIndexed { index, line ->
+        Log.e("TerminalScreen", "screen line[$index]=${line.getText()}")
+    }
+
     val spinnerFrames = listOf("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
-    var spinnerIndex by remember { mutableStateOf(0) }
+    var spinnerIndex by remember { mutableIntStateOf(0) }
 
     val colorScheme = remember(settings.colorScheme) {
         TerminalThemes.getByName(settings.colorScheme)
@@ -110,11 +121,23 @@ fun TerminalScreen(
         }
     }
 
-    var hasExecutedInitialCommand by remember(decodedInitialCommand) { mutableStateOf(false) }
+    var executedInitialCommandForSession by remember {
+        mutableStateOf<Pair<Long?, String?>?>(null)
+    }
 
     val isCurrentSessionRunning by remember(currentSession) {
         currentSession?.isRunning ?: MutableStateFlow(false)
     }.collectAsState(initial = false)
+
+    Log.e("TerminalScreen", "isCurrentSessionRunning=$isCurrentSessionRunning")
+
+    val showRunningOverlay = isCurrentSessionRunning
+    val showStopButton = isCurrentSessionRunning
+
+    Log.e(
+        "TerminalScreen",
+        "UI flags -> running=$isCurrentSessionRunning overlay=$showRunningOverlay stopButton=$showStopButton"
+    )
 
     var inputText by remember(currentSession?.id) { mutableStateOf("") }
     var draftInput by remember(currentSession?.id) { mutableStateOf("") }
@@ -126,7 +149,18 @@ fun TerminalScreen(
     var showMoreMenu by remember { mutableStateOf(false) }
     var sessionToClose by remember { mutableStateOf<TerminalSession?>(null) }
 
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+
+    LaunchedEffect(configuration.screenWidthDp, configuration.screenHeightDp, settings.fontSize, currentSession?.id) {
+        val cols = max(20, (configuration.screenWidthDp * density.density / (settings.fontSize * 0.62f)).toInt())
+        val rows = max(10, (configuration.screenHeightDp * density.density / (settings.fontSize * 1.45f)).toInt())
+        Log.e("TerminalScreen", "resize effect rows=$rows cols=$cols")
+        viewModel.resize(rows, cols)
+    }
+
     LaunchedEffect(currentSession?.id) {
+        Log.e("TerminalScreen", "currentSession changed id=${currentSession?.id}")
         inputText = ""
         draftInput = ""
         viewModel.resetHistoryNavigation()
@@ -134,27 +168,42 @@ fun TerminalScreen(
     }
 
     LaunchedEffect(isCurrentSessionRunning) {
-        if (isCurrentSessionRunning) {
-            while (true) {
-                kotlinx.coroutines.delay(100)
-                spinnerIndex = (spinnerIndex + 1) % spinnerFrames.size
-            }
-        } else {
+        Log.e("TerminalScreen", "spinner effect running=$isCurrentSessionRunning")
+
+        if (!isCurrentSessionRunning) {
             spinnerIndex = 0
+            return@LaunchedEffect
+        }
+
+        while (isCurrentSessionRunning) {
+            delay(100)
+            spinnerIndex = (spinnerIndex + 1) % spinnerFrames.size
         }
     }
 
     LaunchedEffect(currentSession?.id, decodedInitialCommand) {
-        if (!hasExecutedInitialCommand &&
-            currentSession != null &&
-            !decodedInitialCommand.isNullOrBlank()
-        ) {
-            viewModel.executeCommand(decodedInitialCommand)
-            hasExecutedInitialCommand = true
-        }
+        val sessionId = currentSession?.id
+        val command = decodedInitialCommand?.trim()
+
+        Log.e(
+            "TerminalScreen",
+            "initial command effect sessionId=$sessionId command=[$command] executed=$executedInitialCommandForSession"
+        )
+
+        if (sessionId == null || command.isNullOrBlank()) return@LaunchedEffect
+
+        val currentKey = sessionId to command
+        if (executedInitialCommandForSession == currentKey) return@LaunchedEffect
+
+        delay(500)
+
+        Log.e("TerminalScreen", "executing initial command after delay=[$command]")
+        viewModel.executeCommand(command)
+        executedInitialCommandForSession = currentKey
     }
 
     fun submitInput() {
+        Log.e("TerminalScreen", "submitInput inputText=[$inputText]")
         if (inputText.isBlank()) {
             viewModel.sendKey("ENTER")
         } else {
@@ -168,20 +217,17 @@ fun TerminalScreen(
     }
 
     fun handleExtraKey(key: String) {
+        Log.e("TerminalScreen", "handleExtraKey key=$key")
         when (key.uppercase()) {
             "UP" -> {
-                if (draftInput.isEmpty()) {
-                    draftInput = inputText
-                }
+                if (draftInput.isEmpty()) draftInput = inputText
                 viewModel.getPreviousCommand()?.let { inputText = it }
             }
 
             "DOWN" -> {
                 val next = viewModel.getNextCommand()
                 inputText = next ?: draftInput
-                if (next == null) {
-                    draftInput = ""
-                }
+                if (next == null) draftInput = ""
             }
 
             else -> {
@@ -215,11 +261,8 @@ fun TerminalScreen(
                                 modifier = Modifier
                                     .size(8.dp)
                                     .background(
-                                        color = if (isCurrentSessionRunning) {
-                                            colorScheme.green
-                                        } else {
-                                            colorScheme.foreground.copy(alpha = 0.35f)
-                                        },
+                                        color = if (showRunningOverlay) colorScheme.green
+                                        else colorScheme.foreground.copy(alpha = 0.35f),
                                         shape = CircleShape
                                     )
                             )
@@ -421,7 +464,11 @@ fun TerminalScreen(
 
                             IconButton(
                                 onClick = {
-                                    if (isCurrentSessionRunning) {
+                                    Log.e(
+                                        "TerminalScreen",
+                                        "action button clicked, running=$showStopButton input=[$inputText]"
+                                    )
+                                    if (showStopButton) {
                                         viewModel.sendKey("CTRL+C")
                                     } else {
                                         submitInput()
@@ -429,14 +476,10 @@ fun TerminalScreen(
                                 }
                             ) {
                                 Icon(
-                                    imageVector = if (isCurrentSessionRunning) {
-                                        Icons.Default.Close
-                                    } else {
-                                        Icons.Default.Send
-                                    },
-                                    contentDescription = if (isCurrentSessionRunning) "Stop" else "Send",
+                                    imageVector = if (showStopButton) Icons.Default.Close else Icons.Default.Send,
+                                    contentDescription = if (showStopButton) "Stop" else "Send",
                                     tint = when {
-                                        isCurrentSessionRunning -> colorScheme.red
+                                        showStopButton -> colorScheme.red
                                         inputText.isNotBlank() -> colorScheme.green
                                         else -> colorScheme.foreground.copy(alpha = 0.35f)
                                     }
@@ -452,6 +495,8 @@ fun TerminalScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
+                Log.e("TerminalScreen", "Before TerminalOutputView, size=${screenContent.size}")
+
                 TerminalOutputView(
                     lines = screenContent,
                     colorScheme = colorScheme,
@@ -463,7 +508,7 @@ fun TerminalScreen(
                     }
                 )
 
-                if (isCurrentSessionRunning) {
+                if (showRunningOverlay) {
                     Row(
                         modifier = Modifier
                             .align(Alignment.BottomStart)
@@ -525,7 +570,7 @@ fun TerminalScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
 
                     sessions.forEach { session ->
                         SessionItem(
@@ -545,7 +590,7 @@ fun TerminalScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.padding(bottom = 32.dp))
                 }
             }
         }
@@ -657,8 +702,7 @@ fun SessionItem(
                 Icon(
                     Icons.Default.Close,
                     contentDescription = if (canClose) "Close" else "Cannot close last session",
-                    tint = if (canClose) colorScheme.red
-                    else colorScheme.foreground.copy(alpha = 0.3f),
+                    tint = if (canClose) colorScheme.red else colorScheme.foreground.copy(alpha = 0.3f),
                     modifier = Modifier.size(20.dp)
                 )
             }

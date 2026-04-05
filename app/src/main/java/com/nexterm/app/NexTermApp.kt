@@ -6,12 +6,15 @@ import android.app.NotificationManager
 import android.os.Build
 import com.nexterm.app.di.appModule
 import com.nexterm.app.di.repositoryModule
-import com.nexterm.app.di.viewModelModule
 import com.nexterm.app.di.terminalModule
+import com.nexterm.app.di.viewModelModule
+import com.nexterm.app.package_manager.BootstrapManager
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
+import org.koin.java.KoinJavaComponent
+import java.io.File
 
 class NexTermApp : Application() {
 
@@ -22,6 +25,7 @@ class NexTermApp : Application() {
         initKoin()
         createNotificationChannels()
         initializeTerminalEnvironment()
+        initializeBootstrap()
     }
 
     private fun initKoin() {
@@ -54,15 +58,28 @@ class NexTermApp : Application() {
     }
 
     private fun initializeTerminalEnvironment() {
-        val homeDir = filesDir
-        val binDir = java.io.File(homeDir, "usr/bin")
-        val etcDir = java.io.File(homeDir, "usr/etc")
-        val tmpDir = java.io.File(homeDir, "tmp")
-        val libDir = java.io.File(homeDir, "usr/lib")
+        val root = filesDir
+        val dirs = listOf(
+            File(root, "usr"),
+            File(root, "usr/bin"),
+            File(root, "usr/lib"),
+            File(root, "usr/etc"),
+            File(root, "usr/share"),
+            File(root, "tmp"),
+            File(root, "home"),
+            File(root, "packages"),
+            File(root, ".bootstrap")
+        )
 
-        listOf(binDir, etcDir, tmpDir, libDir).forEach { dir ->
+        dirs.forEach { dir ->
             if (!dir.exists()) dir.mkdirs()
         }
+    }
+
+    private fun initializeBootstrap() {
+        val bootstrapManager: BootstrapManager =
+            KoinJavaComponent.get(BootstrapManager::class.java)
+        bootstrapManager.initialize()
     }
 
     companion object {

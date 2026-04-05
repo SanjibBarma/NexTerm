@@ -1,5 +1,6 @@
 package com.nexterm.app.ui.screens.terminal
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nexterm.app.data.local.preferences.TerminalSettings
@@ -41,11 +42,16 @@ class TerminalViewModel(
     private val _commandHistory = MutableStateFlow<List<String>>(emptyList())
     val commandHistory: StateFlow<List<String>> = _commandHistory.asStateFlow()
 
+    private val _isCurrentSessionRunning = MutableStateFlow(false)
+    val isCurrentSessionRunning: StateFlow<Boolean> = _isCurrentSessionRunning.asStateFlow()
+
     private var historyIndex = -1
     private var screenContentJob: Job? = null
     private var restoreJob: Job? = null
+    private var runningStateJob: Job? = null
 
     init {
+        Log.e("TerminalViewModel", "init")
         viewModelScope.launch {
             loadCommandHistory()
         }
@@ -56,9 +62,11 @@ class TerminalViewModel(
         if (restoreJob != null) return
 
         restoreJob = viewModelScope.launch {
+            Log.e("TerminalViewModel", "restoreSessionsOnLaunch()")
             val savedSessions = sessionRepository.getActiveSessions().first()
 
             if (savedSessions.isEmpty()) {
+                Log.e("TerminalViewModel", "No saved sessions, creating new one")
                 createSession()
                 return@launch
             }
@@ -79,6 +87,7 @@ class TerminalViewModel(
             firstSession?.let {
                 sessionManager.setCurrentSession(it.id)
                 observeSessionScreenContent(it)
+                observeRunningState(it)
                 sessionRepository.updateLastAccessed(it.id)
             }
         }
@@ -86,6 +95,8 @@ class TerminalViewModel(
 
     fun createSession(name: String = generateNextSessionName()) {
         viewModelScope.launch {
+            Log.e("TerminalViewModel", "createSession name=$name")
+
             val workingDirectory = sessionManager.getDefaultWorkingDirectory()
 
             val sessionId = sessionRepository.createSession(
@@ -102,12 +113,15 @@ class TerminalViewModel(
             _currentSession.value = session
             sessionManager.setCurrentSession(session.id)
             observeSessionScreenContent(session)
+            observeRunningState(session)
             sessionRepository.updateLastAccessed(session.id)
         }
     }
 
     fun switchSession(session: TerminalSession) {
         if (_currentSession.value?.id == session.id) return
+
+        Log.e("TerminalViewModel", "switchSession id=${session.id}")
 
         _currentSession.value = session
         sessionManager.setCurrentSession(session.id)
@@ -117,10 +131,13 @@ class TerminalViewModel(
         }
 
         observeSessionScreenContent(session)
+        observeRunningState(session)
     }
 
     fun closeSession(session: TerminalSession) {
         viewModelScope.launch {
+            Log.e("TerminalViewModel", "closeSession id=${session.id}")
+
             val currentSessions = sessions.value
             if (currentSessions.size <= 1) return@launch
 
@@ -144,10 +161,13 @@ class TerminalViewModel(
                 if (nextSession != null) {
                     sessionManager.setCurrentSession(nextSession.id)
                     observeSessionScreenContent(nextSession)
+                    observeRunningState(nextSession)
                     sessionRepository.updateLastAccessed(nextSession.id)
                 } else {
                     screenContentJob?.cancel()
+                    runningStateJob?.cancel()
                     _screenContent.value = emptyList()
+                    _isCurrentSessionRunning.value = false
                 }
             }
         }
@@ -155,12 +175,14 @@ class TerminalViewModel(
 
     fun sendInput(input: String) {
         viewModelScope.launch {
+            Log.e("TerminalViewModel", "sendInput: [$input]")
             _currentSession.value?.sendInput(input)
         }
     }
 
     fun sendKey(key: String) {
         viewModelScope.launch {
+            Log.e("TerminalViewModel", "sendKey: $key")
             _currentSession.value?.sendKey(key)
         }
     }
@@ -172,6 +194,7 @@ class TerminalViewModel(
         viewModelScope.launch {
             val session = _currentSession.value ?: return@launch
 
+            Log.e("TerminalViewModel", "executeCommand: $trimmed")
             session.executeCommand(trimmed)
 
             sessionRepository.addCommandToHistory(
@@ -189,7 +212,11 @@ class TerminalViewModel(
     }
 
     fun resize(rows: Int, cols: Int) {
+        Log.e("TerminalViewModel", "resize rows=$rows cols=$cols")
         _currentSession.value?.resize(rows, cols)
+        viewModelScope.launch {
+            settingsRepository.updateTerminalSize(rows, cols)
+        }
     }
 
     fun getPreviousCommand(): String? {
@@ -224,16 +251,36 @@ class TerminalViewModel(
     }
 
     private fun observeSessionScreenContent(session: TerminalSession) {
+        Log.e("TerminalViewModel", "observeSessionScreenContent session=${session.id}")
         screenContentJob?.cancel()
         screenContentJob = viewModelScope.launch {
             session.screenContent.collect { content ->
-                _screenContent.value = content
+                val snapshot = content.map { it.copy() }
+
+                Log.e("TerminalViewModel", "Collected screen content size=${snapshot.size}")
+                snapshot.forEachIndexed { index, line ->
+                    Log.e("TerminalViewModel", "VM line[$index]=${line.getText()}")
+                }
+
+                _screenContent.value = snapshot
+            }
+        }
+    }
+
+    private fun observeRunningState(session: TerminalSession) {
+        Log.e("TerminalViewModel", "observeRunningState session=${session.id}")
+        runningStateJob?.cancel()
+        runningStateJob = viewModelScope.launch {
+            session.isRunning.collect { running ->
+                Log.e("TerminalViewModel", "session ${session.id} running=$running")
+                _isCurrentSessionRunning.value = running
             }
         }
     }
 
     private suspend fun loadCommandHistory() {
         val commands = sessionRepository.getUniqueCommands(100)
+        Log.e("TerminalViewModel", "loadCommandHistory size=${commands.size}")
         _commandHistory.value = commands
     }
 
@@ -250,7 +297,9 @@ class TerminalViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        Log.e("TerminalViewModel", "onCleared")
         screenContentJob?.cancel()
+        runningStateJob?.cancel()
         restoreJob?.cancel()
         sessionManager.closeAllSessions()
     }

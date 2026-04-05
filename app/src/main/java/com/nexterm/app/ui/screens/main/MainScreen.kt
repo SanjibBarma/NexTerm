@@ -377,6 +377,12 @@ private fun navigateToToolCommand(
 ) {
     val command = getToolCommand(tool)
     val encodedCommand = URLEncoder.encode(command, StandardCharsets.UTF_8.toString())
+
+    android.util.Log.e(
+        "MainScreen",
+        "navigateToToolCommand tool=$tool command=[$command] encoded=[$encodedCommand]"
+    )
+
     navController.navigate(Screen.Terminal.createRoute(encodedCommand)) {
         launchSingleTop = true
     }

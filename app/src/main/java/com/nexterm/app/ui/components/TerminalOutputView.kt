@@ -1,5 +1,6 @@
 package com.nexterm.app.ui.components
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -40,11 +41,22 @@ fun TerminalOutputView(
     modifier: Modifier = Modifier,
     onTap: () -> Unit = {}
 ) {
+    Log.e("TerminalOutputView", "Composable called, size=${lines.size}")
+
     val listState = rememberLazyListState()
     val horizontalScrollState = rememberScrollState()
     val clipboardManager = LocalClipboardManager.current
 
-    LaunchedEffect(lines.size) {
+    val renderKey = remember(lines) {
+        lines.joinToString(separator = "\n") { it.getText() }
+    }
+
+    LaunchedEffect(renderKey) {
+        Log.e("TerminalOutputView", "LaunchedEffect(renderKey) triggered, size=${lines.size}")
+        lines.forEachIndexed { index, line ->
+            Log.e("TerminalOutputView", "UI line[$index]: ${line.getText()}")
+        }
+
         if (lines.isNotEmpty()) {
             listState.scrollToItem(lines.lastIndex)
         }
@@ -67,6 +79,7 @@ fun TerminalOutputView(
 
                         if (text.isNotEmpty()) {
                             clipboardManager.setText(AnnotatedString(text))
+                            Log.e("TerminalOutputView", "Copied text:\n$text")
                         }
                     }
                 )
@@ -82,7 +95,8 @@ fun TerminalOutputView(
             itemsIndexed(
                 items = lines,
                 key = { index, _ -> index }
-            ) { _, line ->
+            ) { index, line ->
+                Log.e("TerminalOutputView", "Rendering line[$index]: ${line.getText()}")
                 TerminalLineView(
                     line = line,
                     colorScheme = colorScheme,
@@ -99,6 +113,8 @@ fun TerminalLineView(
     colorScheme: TerminalColorScheme,
     fontSize: Int
 ) {
+    Log.e("TerminalLineView", "Rendering text: ${line.getText()}")
+
     val annotatedString = remember(line, colorScheme) {
         buildAnnotatedString {
             val chars = line.getChars()

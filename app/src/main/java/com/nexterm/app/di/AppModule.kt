@@ -7,15 +7,22 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.nexterm.app.data.local.database.NexTermDatabase
 import com.nexterm.app.data.local.preferences.AppPreferences
+import com.nexterm.app.package_manager.BinaryCommandResolver
+import com.nexterm.app.package_manager.BinaryInstaller
+import com.nexterm.app.package_manager.BootstrapManager
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
-import kotlin.jvm.java
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "nexterm_preferences")
 
 val appModule = module {
     single { androidContext().dataStore }
     single { AppPreferences(get()) }
+
+    single { BinaryInstaller(get()) }
+    single { BinaryCommandResolver(get()) }
+    single { BootstrapManager(get()) }
+
     single {
         Room.databaseBuilder(
             androidContext(),
@@ -25,6 +32,7 @@ val appModule = module {
             .fallbackToDestructiveMigration()
             .build()
     }
+
     single { get<NexTermDatabase>().sessionDao() }
     single { get<NexTermDatabase>().commandHistoryDao() }
 }
