@@ -107,42 +107,10 @@ fun TerminalScreen(
         focusRequester.requestFocus()
     }
 
-    LaunchedEffect(screenContent) {
-        if (screenContent.isNotEmpty()) {
-            val lastLine = screenContent.lastOrNull()?.getText()?.trim()
-            if (!lastLine.isNullOrBlank()) {
-                Log.e("NexTerm-LOG", "<<< [TERMINAL-OUTPUT]: $lastLine")
-            }
-        }
-    }
-
-    LaunchedEffect(isCurrentSessionRunning) {
-        if (!isCurrentSessionRunning && screenContent.isNotEmpty()) {
-            val lastLines = screenContent.takeLast(5).joinToString("\n") { it.getText() }
-            Log.e("NexTerm-LOG", "<<< [NexTerm-RESPONSE-FINISH]:\n$lastLines")
-        }
-        while (isCurrentSessionRunning) {
-            delay(100)
-            spinnerIndex = (spinnerIndex + 1) % spinnerFrames.size
-        }
-    }
-
-    LaunchedEffect(currentSession?.id, decodedInitialCommand) {
-        val sessionId = currentSession?.id
-        val command = decodedInitialCommand?.trim()
-        if (sessionId == null || command.isNullOrBlank()) return@LaunchedEffect
-        val currentKey = sessionId to command
-        if (executedInitialCommandForSession == currentKey) return@LaunchedEffect
-        delay(500)
-        viewModel.executeCommand(command)
-        executedInitialCommandForSession = currentKey
-    }
-
     fun submitInput() {
-        if (inputText.isNotBlank()) Log.e("NexTerm-LOG", ">>> [NexTerm-COMMAND]: $inputText")
         if (inputText.isBlank()) { viewModel.sendKey("ENTER") } 
         else {
-            viewModel.executeCommand(inputText)
+            viewModel.onCommand(inputText)
             inputText = ""
             draftInput = ""
             viewModel.resetHistoryNavigation()
@@ -179,8 +147,6 @@ fun TerminalScreen(
                             Icon(Icons.Default.Terminal, null, tint = hackerGreen, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("TERMINAL", style = MaterialTheme.typography.titleMedium, color = hackerGreen, fontFamily = FontFamily.Monospace)
-                            Spacer(Modifier.width(8.dp))
-                            Box(Modifier.size(8.dp).background(color = if (isCurrentSessionRunning) hackerGreen else Color.DarkGray, shape = CircleShape))
                         }
                     },
                     navigationIcon = {
@@ -206,48 +172,83 @@ fun TerminalScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = hackerBlack, titleContentColor = hackerGreen)
                 )
-            },
-            bottomBar = {
-                Column(modifier = Modifier.fillMaxWidth().background(hackerBlack).navigationBarsPadding()) {
+            }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .background(hackerBlack)
+            ) {
+                // Terminal Output Area - using weight(1f, fill = false) to "wrap" content
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .padding(horizontal = 8.dp)
+                        .border(0.5.dp, hackerGreen.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                ) {
+                    TerminalOutputView(
+                        lines = screenContent,
+                        colorScheme = colorScheme,
+                        fontSize = settings.fontSize,
+                        modifier = Modifier.fillMaxWidth(),
+                        onTap = { focusRequester.requestFocus(); keyboardController?.show() }
+                    )
+                }
+
+                // Input Section - moved here to follow the terminal view
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(hackerBlack)
+                        .navigationBarsPadding()
+                ) {
                     if (settings.extraKeysEnabled) {
                         ExtraKeysBar(keysRow = settings.extraKeysRow, onKeyClick = ::handleExtraKey, colorScheme = colorScheme)
                     }
-                    Surface(color = hackerBlack, tonalElevation = 0.dp, modifier = Modifier.fillMaxWidth().border(0.5.dp, hackerGreen.copy(0.3f))) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = hackerBlack,
+                        tonalElevation = 0.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(0.5.dp, hackerGreen.copy(0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text("❯", color = hackerGreen, fontFamily = FontFamily.Monospace, fontSize = settings.fontSize.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.width(8.dp))
                             Box(Modifier.weight(1f)) {
                                 BasicTextField(
                                     value = inputText,
                                     onValueChange = { inputText = it; draftInput = it; viewModel.resetHistoryNavigation() },
-                                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).padding(vertical = 10.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(focusRequester)
+                                        .padding(vertical = 10.dp),
                                     textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = settings.fontSize.sp),
                                     cursorBrush = SolidColor(hackerGreen),
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Send),
                                     keyboardActions = KeyboardActions(onSend = { submitInput() }),
                                     singleLine = true
                                 )
-                                if (inputText.isEmpty()) Text("waiting_for_input...", color = Color.DarkGray, fontFamily = FontFamily.Monospace, fontSize = settings.fontSize.sp, modifier = Modifier.padding(vertical = 10.dp))
+                                if (inputText.isEmpty()) Text("waiting...", color = Color.DarkGray, fontFamily = FontFamily.Monospace, fontSize = settings.fontSize.sp, modifier = Modifier.padding(vertical = 10.dp))
                             }
-                            IconButton(onClick = { if (showStopButton) viewModel.sendKey("CTRL+C") else submitInput() }, enabled = showStopButton || inputText.isNotBlank()) {
-                                Icon(imageVector = if (showStopButton) Icons.Default.Close else Icons.Default.Send, contentDescription = null, tint = if (showStopButton) Color.Red else if (inputText.isNotBlank()) hackerGreen else Color.DarkGray)
+                            IconButton(
+                                onClick = { if (showStopButton) viewModel.sendKey("CTRL+C") else submitInput() },
+                                enabled = showStopButton || inputText.isNotBlank()
+                            ) {
+                                Icon(
+                                    imageVector = if (showStopButton) Icons.Default.Close else Icons.Default.Send,
+                                    contentDescription = null,
+                                    tint = if (showStopButton) Color.Red else if (inputText.isNotBlank()) hackerGreen else Color.DarkGray
+                                )
                             }
                         }
-                    }
-                }
-            }
-        ) { paddingValues ->
-            Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-                TerminalOutputView(
-                    lines = screenContent,
-                    colorScheme = colorScheme,
-                    fontSize = settings.fontSize,
-                    modifier = Modifier.fillMaxSize().background(hackerBlack),
-                    onTap = { focusRequester.requestFocus(); keyboardController?.show() }
-                )
-                if (isCurrentSessionRunning) {
-                    Row(modifier = Modifier.align(Alignment.BottomStart).padding(12.dp).background(Color.Black.copy(0.7f), RoundedCornerShape(4.dp)).border(0.5.dp, hackerGreen, RoundedCornerShape(4.dp)).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("[${spinnerFrames[spinnerIndex]}] EXECUTING_TASK...", color = hackerGreen, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                     }
                 }
             }

@@ -5,11 +5,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
@@ -20,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -32,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nexterm.app.terminal.buffer.TerminalLine
 import com.nexterm.app.ui.theme.TerminalColorScheme
+import kotlin.math.max
 
 @Composable
 fun TerminalOutputView(
@@ -41,24 +44,35 @@ fun TerminalOutputView(
     modifier: Modifier = Modifier,
     onTap: () -> Unit = {}
 ) {
-    Log.e("TerminalOutputView", "Composable called, size=${lines.size}")
-
     val listState = rememberLazyListState()
     val horizontalScrollState = rememberScrollState()
     val clipboardManager = LocalClipboardManager.current
-
-    val renderKey = remember(lines) {
-        lines.joinToString(separator = "\n") { it.getText() }
+    val density = LocalDensity.current
+    
+    // Filter out trailing blank lines
+    val displayLines = remember(lines) {
+        val lastContentIndex = lines.indexOfLast { !it.isBlank() }
+        if (lastContentIndex == -1) {
+            if (lines.isEmpty()) emptyList() else listOf(lines[0])
+        } else {
+            lines.take(lastContentIndex + 1)
+        }
     }
 
-    LaunchedEffect(renderKey) {
-        Log.e("TerminalOutputView", "LaunchedEffect(renderKey) triggered, size=${lines.size}")
-        lines.forEachIndexed { index, line ->
-            Log.e("TerminalOutputView", "UI line[$index]: ${line.getText()}")
+    // Dynamic width calculation based on the longest line
+    // Since it's Monospace, char width is consistent (approx 0.6 * fontSize)
+    val estimatedWidth = remember(displayLines, fontSize) {
+        val maxChars = displayLines.maxOfOrNull { it.getText().trimEnd().length } ?: 0
+        with(density) {
+            // 0.6f is a standard ratio for monospace width/height
+            (maxChars * fontSize * 0.62f).sp.toDp() + 32.dp 
         }
+    }
 
-        if (lines.isNotEmpty()) {
-            listState.scrollToItem(lines.lastIndex)
+    // Auto-scroll to bottom
+    LaunchedEffect(displayLines.size) {
+        if (displayLines.isNotEmpty()) {
+            listState.animateScrollToItem(displayLines.lastIndex)
         }
     }
 
@@ -66,37 +80,36 @@ fun TerminalOutputView(
         modifier = modifier
             .fillMaxSize()
             .background(colorScheme.background)
-            .pointerInput(lines) {
-                detectTapGestures(
-                    onTap = { onTap() },
-                    onLongPress = {
-                        val text = buildString {
-                            lines.forEach { line ->
-                                append(line.getText().trimEnd())
-                                append("\n")
-                            }
-                        }.trimEnd()
-
-                        if (text.isNotEmpty()) {
-                            clipboardManager.setText(AnnotatedString(text))
-                            Log.e("TerminalOutputView", "Copied text:\n$text")
-                        }
-                    }
-                )
-            }
+            .horizontalScroll(horizontalScrollState)
     ) {
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .fillMaxSize()
-                .horizontalScroll(horizontalScrollState)
+                .fillMaxHeight()
+                .width(estimatedWidth) // Apply the flexible calculated width
                 .padding(horizontal = 10.dp, vertical = 8.dp)
+                .pointerInput(displayLines) {
+                    detectTapGestures(
+                        onTap = { onTap() },
+                        onLongPress = {
+                            val text = buildString {
+                                displayLines.forEach { line ->
+                                    append(line.getText().trimEnd())
+                                    append("\n")
+                                }
+                            }.trimEnd()
+
+                            if (text.isNotEmpty()) {
+                                clipboardManager.setText(AnnotatedString(text))
+                            }
+                        }
+                    )
+                }
         ) {
-            itemsIndexed(
-                items = lines,
-                key = { index, _ -> index }
-            ) { index, line ->
-                Log.e("TerminalOutputView", "Rendering line[$index]: ${line.getText()}")
+            items(
+                items = displayLines,
+                key = { it.id }
+            ) { line ->
                 TerminalLineView(
                     line = line,
                     colorScheme = colorScheme,
@@ -113,8 +126,6 @@ fun TerminalLineView(
     colorScheme: TerminalColorScheme,
     fontSize: Int
 ) {
-    Log.e("TerminalLineView", "Rendering text: ${line.getText()}")
-
     val annotatedString = remember(line, colorScheme) {
         buildAnnotatedString {
             val chars = line.getChars()
@@ -173,7 +184,6 @@ fun TerminalLineView(
         fontFamily = FontFamily.Monospace,
         fontSize = fontSize.sp,
         lineHeight = (fontSize * 1.32f).sp,
-        modifier = Modifier.fillMaxWidth(),
         softWrap = false
     )
 }

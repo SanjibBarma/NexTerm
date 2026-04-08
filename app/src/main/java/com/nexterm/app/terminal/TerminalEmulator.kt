@@ -24,62 +24,45 @@ class TerminalEmulator(
 
     private var currentAttributes = CharacterAttributes()
     private var savedCursorPosition = CursorPosition(0, 0)
-
     private val scrollbackBuffer = mutableListOf<TerminalLine>()
     private var maxScrollback = 10000
 
     init {
+        Log.e("TerminalEmulator", "TerminalEmulator.init() called, rows=$rows, cols=$cols")
         updateScreen()
     }
 
     fun write(data: String) {
-        Log.e("TerminalEmulator", "write called with=[$data]")
-
-        val parsedSequences = ansiParser.parse(data)
-        Log.e("TerminalEmulator", "parsed sequence count=${parsedSequences.size}")
-
-        parsedSequences.forEach { sequence ->
-            when (sequence) {
+        Log.e("TerminalEmulator", "write() called with data length=${data.length}, content: $data")
+        if (data.isEmpty()) {
+            return
+        }
+        val parsed = ansiParser.parse(data)
+        Log.e("TerminalEmulator", "Parsed ${parsed.size} sequences")
+        parsed.forEach { seq ->
+            when (seq) {
                 is AnsiParser.ParsedSequence.Text -> {
-                    Log.e("TerminalEmulator", "Parsed Text=[${sequence.text}]")
-                    writeText(sequence.text)
+                    Log.e("TerminalEmulator", "Text sequence: ${seq.text}")
+                    seq.text.forEach { writeChar(it) }
                 }
                 is AnsiParser.ParsedSequence.ControlCode -> {
-                    Log.e("TerminalEmulator", "Parsed ControlCode=[${sequence.code.code}]")
-                    handleControlCode(sequence.code)
+                    Log.e("TerminalEmulator", "Control code: ${seq.code}")
+                    handleControlCode(seq.code)
                 }
                 is AnsiParser.ParsedSequence.EscapeSequence -> {
-                    Log.e(
-                        "TerminalEmulator",
-                        "Parsed EscapeSequence type=${sequence.type} params=${sequence.params}"
-                    )
-                    handleEscapeSequence(sequence)
+                    Log.e("TerminalEmulator", "Escape sequence: ${seq.type} params=${seq.params}")
+                    handleEscapeSequence(seq)
                 }
             }
         }
-
         updateScreen()
-    }
-
-    private fun writeText(text: String) {
-        text.forEach { char ->
-            writeChar(char)
-        }
+        Log.e("TerminalEmulator", "updateScreen() called, screenContent now has ${_screenContent.value.size} lines")
     }
 
     private fun writeChar(char: Char) {
-        var cursor = _cursorPosition.value
-        var buffer = _buffer.value
-
-        if (cursor.col >= cols) {
-            newLine()
-            cursor = _cursorPosition.value
-            buffer = _buffer.value
-        }
-
-        buffer.setChar(cursor.row, cursor.col, char, currentAttributes)
-        _buffer.value = buffer.copy()
-
+        if (_cursorPosition.value.col >= cols) { newLine() }
+        val cursor = _cursorPosition.value
+        _buffer.value.setChar(cursor.row, cursor.col, char, currentAttributes)
         _cursorPosition.value = cursor.copy(col = cursor.col + 1)
     }
 
@@ -87,61 +70,44 @@ class TerminalEmulator(
         when (code) {
             '\n' -> newLine()
             '\r' -> carriageReturn()
-            '\t' -> tab()
-            '\b' -> backspace()
-            '\u0007' -> bell()
+            '\t' -> repeat(8 - (_cursorPosition.value.col % 8)) { writeChar(' ') }
+            '\b' -> _cursorPosition.value = _cursorPosition.value.copy(col = (_cursorPosition.value.col - 1).coerceAtLeast(0))
         }
     }
 
-    private fun handleEscapeSequence(sequence: AnsiParser.ParsedSequence.EscapeSequence) {
-        when (sequence.type) {
-            "m" -> handleSGR(sequence.params)
-            "H", "f" -> handleCursorPosition(sequence.params)
-            "A" -> moveCursorUp(sequence.params.firstOrNull() ?: 1)
-            "B" -> moveCursorDown(sequence.params.firstOrNull() ?: 1)
-            "C" -> moveCursorForward(sequence.params.firstOrNull() ?: 1)
-            "D" -> moveCursorBack(sequence.params.firstOrNull() ?: 1)
-            "J" -> handleEraseDisplay(sequence.params.firstOrNull() ?: 0)
-            "K" -> handleEraseLine(sequence.params.firstOrNull() ?: 0)
-            "s" -> saveCursor()
-            "u" -> restoreCursor()
-            "r" -> setScrollRegion(sequence.params)
-            "IND" -> newLine()
-            "NEL" -> {
-                newLine()
-                carriageReturn()
+    private fun handleEscapeSequence(seq: AnsiParser.ParsedSequence.EscapeSequence) {
+        when (seq.type) {
+            "m" -> handleSGR(seq.params)
+            "H", "f" -> {
+                val r = (seq.params.getOrNull(0) ?: 1) - 1
+                val c = (seq.params.getOrNull(1) ?: 1) - 1
+                _cursorPosition.value = CursorPosition(r.coerceIn(0, rows - 1), c.coerceIn(0, cols - 1))
             }
-            "RI" -> reverseIndex()
-            "RIS" -> reset()
+            "J" -> _buffer.value.clear()
+            "K" -> _buffer.value.clearLine(_cursorPosition.value.row, _cursorPosition.value.col, cols - 1)
         }
     }
 
     private fun handleSGR(params: List<Int>) {
-        if (params.isEmpty()) {
-            currentAttributes = CharacterAttributes()
-            return
-        }
-
+        if (params.isEmpty()) { currentAttributes = CharacterAttributes(); return }
         var i = 0
         while (i < params.size) {
-            when (val param = params[i]) {
+            when (val p = params[i]) {
                 0 -> currentAttributes = CharacterAttributes()
                 1 -> currentAttributes = currentAttributes.copy(bold = true)
                 2 -> currentAttributes = currentAttributes.copy(dim = true)
                 3 -> currentAttributes = currentAttributes.copy(italic = true)
                 4 -> currentAttributes = currentAttributes.copy(underline = true)
-                5, 6 -> currentAttributes = currentAttributes.copy(blink = true)
                 7 -> currentAttributes = currentAttributes.copy(inverse = true)
                 8 -> currentAttributes = currentAttributes.copy(hidden = true)
                 9 -> currentAttributes = currentAttributes.copy(strikethrough = true)
                 22 -> currentAttributes = currentAttributes.copy(bold = false, dim = false)
                 23 -> currentAttributes = currentAttributes.copy(italic = false)
                 24 -> currentAttributes = currentAttributes.copy(underline = false)
-                25 -> currentAttributes = currentAttributes.copy(blink = false)
                 27 -> currentAttributes = currentAttributes.copy(inverse = false)
                 28 -> currentAttributes = currentAttributes.copy(hidden = false)
                 29 -> currentAttributes = currentAttributes.copy(strikethrough = false)
-                in 30..37 -> currentAttributes = currentAttributes.copy(foreground = param - 30)
+                in 30..37 -> currentAttributes = currentAttributes.copy(foreground = p - 30)
                 38 -> {
                     if (i + 2 < params.size && params[i + 1] == 5) {
                         currentAttributes = currentAttributes.copy(foreground = params[i + 2])
@@ -149,7 +115,7 @@ class TerminalEmulator(
                     }
                 }
                 39 -> currentAttributes = currentAttributes.copy(foreground = 7)
-                in 40..47 -> currentAttributes = currentAttributes.copy(background = param - 40)
+                in 40..47 -> currentAttributes = currentAttributes.copy(background = p - 40)
                 48 -> {
                     if (i + 2 < params.size && params[i + 1] == 5) {
                         currentAttributes = currentAttributes.copy(background = params[i + 2])
@@ -157,192 +123,51 @@ class TerminalEmulator(
                     }
                 }
                 49 -> currentAttributes = currentAttributes.copy(background = 0)
-                in 90..97 -> currentAttributes = currentAttributes.copy(foreground = param - 90 + 8)
-                in 100..107 -> currentAttributes = currentAttributes.copy(background = param - 100 + 8)
+                in 90..97 -> currentAttributes = currentAttributes.copy(foreground = p - 90 + 8)
+                in 100..107 -> currentAttributes = currentAttributes.copy(background = p - 100 + 8)
             }
             i++
         }
     }
 
-    private fun handleCursorPosition(params: List<Int>) {
-        val row = (params.getOrNull(0) ?: 1) - 1
-        val col = (params.getOrNull(1) ?: 1) - 1
-        _cursorPosition.value = CursorPosition(
-            row = row.coerceIn(0, rows - 1),
-            col = col.coerceIn(0, cols - 1)
-        )
-    }
-
-    private fun moveCursorUp(n: Int) {
-        val cursor = _cursorPosition.value
-        _cursorPosition.value = cursor.copy(row = (cursor.row - n).coerceAtLeast(0))
-    }
-
-    private fun moveCursorDown(n: Int) {
-        val cursor = _cursorPosition.value
-        _cursorPosition.value = cursor.copy(row = (cursor.row + n).coerceAtMost(rows - 1))
-    }
-
-    private fun moveCursorForward(n: Int) {
-        val cursor = _cursorPosition.value
-        _cursorPosition.value = cursor.copy(col = (cursor.col + n).coerceAtMost(cols - 1))
-    }
-
-    private fun moveCursorBack(n: Int) {
-        val cursor = _cursorPosition.value
-        _cursorPosition.value = cursor.copy(col = (cursor.col - n).coerceAtLeast(0))
-    }
-
-    private fun handleEraseDisplay(mode: Int) {
-        val buffer = _buffer.value
-        val cursor = _cursorPosition.value
-
-        when (mode) {
-            0 -> buffer.clearRange(cursor.row, cursor.col, rows - 1, cols - 1)
-            1 -> buffer.clearRange(0, 0, cursor.row, cursor.col)
-            2, 3 -> buffer.clear()
-        }
-
-        _buffer.value = buffer.copy()
-    }
-
-    private fun handleEraseLine(mode: Int) {
-        val buffer = _buffer.value
-        val cursor = _cursorPosition.value
-
-        when (mode) {
-            0 -> buffer.clearLine(cursor.row, cursor.col, cols - 1)
-            1 -> buffer.clearLine(cursor.row, 0, cursor.col)
-            2 -> buffer.clearLine(cursor.row, 0, cols - 1)
-        }
-
-        _buffer.value = buffer.copy()
-    }
-
-    private fun setScrollRegion(params: List<Int>) {
-        val top = (params.getOrNull(0) ?: 1) - 1
-        val bottom = (params.getOrNull(1) ?: rows) - 1
-        val buffer = _buffer.value
-        buffer.setScrollRegion(top, bottom)
-        _buffer.value = buffer.copy()
-    }
-
-    private fun saveCursor() {
-        savedCursorPosition = _cursorPosition.value
-    }
-
-    private fun restoreCursor() {
-        _cursorPosition.value = savedCursorPosition
-    }
-
     private fun newLine() {
         val cursor = _cursorPosition.value
-
         if (cursor.row >= rows - 1) {
-            scroll()
-        } else {
-            _cursorPosition.value = cursor.copy(
-                row = cursor.row + 1,
-                col = 0
-            )
-        }
-    }
-
-    private fun carriageReturn() {
-        _cursorPosition.value = _cursorPosition.value.copy(col = 0)
-    }
-
-    private fun tab() {
-        val cursor = _cursorPosition.value
-        val nextTab = ((cursor.col / 8) + 1) * 8
-        _cursorPosition.value = cursor.copy(col = nextTab.coerceAtMost(cols - 1))
-    }
-
-    private fun backspace() {
-        val cursor = _cursorPosition.value
-        if (cursor.col > 0) {
-            _cursorPosition.value = cursor.copy(col = cursor.col - 1)
-        }
-    }
-
-    private fun bell() {}
-
-    private fun reverseIndex() {
-        val cursor = _cursorPosition.value
-        _cursorPosition.value = cursor.copy(row = (cursor.row - 1).coerceAtLeast(0))
-    }
-
-    private fun reset() {
-        _buffer.value = TerminalBuffer(rows, cols)
-        _cursorPosition.value = CursorPosition(0, 0)
-        currentAttributes = CharacterAttributes()
-        savedCursorPosition = CursorPosition(0, 0)
-        scrollbackBuffer.clear()
-        updateScreen()
-    }
-
-    private fun scroll() {
-        val buffer = _buffer.value
-        val firstLine = buffer.getLine(0)
-
-        if (firstLine != null) {
-            scrollbackBuffer.add(firstLine.copy())
-            while (scrollbackBuffer.size > maxScrollback) {
-                scrollbackBuffer.removeAt(0)
+            val topRow = _buffer.value.getLine(0)
+            if (topRow != null) {
+                scrollbackBuffer.add(topRow.copy())
+                if (scrollbackBuffer.size > maxScrollback) scrollbackBuffer.removeAt(0)
             }
+            _buffer.value.scrollUp()
+            _cursorPosition.value = cursor.copy(col = 0)
+        } else {
+            _cursorPosition.value = cursor.copy(row = cursor.row + 1, col = 0)
         }
-
-        buffer.scrollUp()
-        _buffer.value = buffer.copy()
-        _cursorPosition.value = _cursorPosition.value.copy(col = 0)
+        // Force trigger buffer refresh
+        _buffer.value = _buffer.value.copy()
     }
+
+    private fun carriageReturn() { _cursorPosition.value = _cursorPosition.value.copy(col = 0) }
 
     private fun updateScreen() {
-        val visibleLines = _buffer.value.getDisplayLines()
-
-        val combinedLines = buildList {
-            addAll(scrollbackBuffer.map { it.copy() })
-            addAll(visibleLines.map { it.copy() })
-        }.map { it.copy() }
-
-        _screenContent.value = combinedLines.takeLast(maxScrollback + rows)
-
-        Log.e("TerminalEmulator", "updateScreen size=${_screenContent.value.size}")
-        _screenContent.value.forEachIndexed { index, line ->
-            Log.e("TerminalEmulator", "screen[$index]=${line.getText()}")
+        // 🔥 FIX: Create a deep copy of the lines. This creates new TerminalLine objects,
+        // ensuring the StateFlow emits a new value and the UI updates.
+        val newContent = (scrollbackBuffer + _buffer.value.getLines()).map { it.copy() }
+        Log.e("TerminalEmulator", "updateScreen(): total lines=${newContent.size}, scrollback=${scrollbackBuffer.size}, buffer=${_buffer.value.getLines().size}")
+        newContent.forEachIndexed { index, line ->
+            Log.e("TerminalEmulator", "  Line[$index]: '${line.getText()}'")
         }
+        _screenContent.value = newContent
     }
 
-    fun resize(newRows: Int, newCols: Int) {
-        Log.e("TerminalEmulator", "resize newRows=$newRows newCols=$newCols")
-
-        rows = newRows
-        cols = newCols
-
-        _buffer.value = _buffer.value.resize(newRows, newCols)
-        _cursorPosition.value = CursorPosition(
-            row = _cursorPosition.value.row.coerceIn(0, newRows - 1),
-            col = _cursorPosition.value.col.coerceIn(0, newCols - 1)
-        )
-
-        updateScreen()
-    }
-
-    fun getScrollbackHistory(): List<TerminalLine> = scrollbackBuffer.map { it.copy() }
-
-    fun setMaxScrollback(lines: Int) {
-        maxScrollback = lines.coerceAtLeast(100)
-        while (scrollbackBuffer.size > maxScrollback) {
-            scrollbackBuffer.removeAt(0)
-        }
+    fun resize(r: Int, c: Int) {
+        rows = r; cols = c
+        _buffer.value = _buffer.value.resize(r, c)
         updateScreen()
     }
 }
 
-data class CursorPosition(
-    val row: Int,
-    val col: Int
-)
+data class CursorPosition(val row: Int, val col: Int)
 
 data class CharacterAttributes(
     val bold: Boolean = false,

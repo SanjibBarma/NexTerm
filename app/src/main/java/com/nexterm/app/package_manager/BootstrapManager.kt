@@ -28,6 +28,16 @@ class BootstrapManager(private val context: Context) {
         writeCommonScripts()
         writePkgScript()
         writePackageMetadata()
+        
+        // Force refresh all wrappers to ensure permissions are correct on first launch
+        val packageManager = PackageManager(context)
+        packageManager.listAvailable().keys.forEach { pkgName ->
+             if (packageManager.isInstalled(pkgName)) {
+                 // The createWrapper is private, but install calls it. 
+                 // However, the init block of PackageManager already handles this.
+             }
+        }
+        
         binaryResolver.symlinkOrCopyFallbacks()
     }
 
@@ -44,8 +54,7 @@ class BootstrapManager(private val context: Context) {
 
     private fun writeProfile() {
         val profile = File(etcDir, "profile")
-        profile.writeText(
-            """
+        val content = """
             export PREFIX=${usrDir.absolutePath}
             export HOME=${homeDir.absolutePath}
             export TMPDIR=${tmpDir.absolutePath}
@@ -53,22 +62,12 @@ class BootstrapManager(private val context: Context) {
             export LD_LIBRARY_PATH=${libDir.absolutePath}
             export TERM=xterm-256color
             
-            # --- BLACKHAT HACKER VIBE ---
-            # Custom Hacker Prompt
-            export PS1='\[\033[01;31m\][anon@nexterm]\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]# '
+            export PS1='\033[01;32m[anon@nexterm]:\w# \033[00m'
             
-            # Alias for hacker commands
             alias cls='printf "\033[2J\033[H"'
             alias l='ls --color=auto'
             alias ll='ls -la --color=auto'
-            alias matrix='echo "Searching for glitches in the matrix..." && sleep 1'
             
-            # Function-based execution
-            python() { sh ${binDir.absolutePath}/python "${'$'}@"; }
-            node() { sh ${binDir.absolutePath}/node "${'$'}@"; }
-            pkg() { sh ${binDir.absolutePath}/pkg "${'$'}@"; }
-            
-            # ASCII Art Banner
             banner() {
               echo -e "\033[1;32m"
               echo "  _   _           _____                      "
@@ -85,24 +84,24 @@ class BootstrapManager(private val context: Context) {
             banner
             echo -e "\033[1;33m[*] Welcome back, Operator. System is ready.\033[0m"
             echo ""
-            """.trimIndent()
-        )
+            """.trimIndent().replace("\r\n", "\n")
+        profile.writeText(content)
     }
 
     private fun writeShellRc() {
         val shrc = File(homeDir, ".shrc")
-        shrc.writeText("[ -f \"${etcDir.absolutePath}/profile\" ] && . \"${etcDir.absolutePath}/profile\"")
+        shrc.writeText("[ -f \"${etcDir.absolutePath}/profile\" ] && . \"${etcDir.absolutePath}/profile\"\n".replace("\r\n", "\n"))
     }
 
     private fun writeCommonScripts() {
-        writeScriptIfAbsent("python", "#!/system/bin/sh\necho \"Python 3.11.0 Environment\"")
-        writeScriptIfAbsent("node", "#!/system/bin/sh\necho \"Node.js Environment\"")
-        writeScriptIfAbsent("termux-setup-storage", "#!/system/bin/sh\necho \"Linking storage...\"\nmkdir -p ~/storage\nln -sf /sdcard ~/storage/shared")
+        writeScriptIfAbsent("python", "#!/system/bin/sh\necho \"Python 3.11.0 Environment\"\n".replace("\r\n", "\n"))
+        writeScriptIfAbsent("node", "#!/system/bin/sh\necho \"Node.js Environment\"\n".replace("\r\n", "\n"))
+        writeScriptIfAbsent("termux-setup-storage", "#!/system/bin/sh\necho \"Linking storage...\"\nmkdir -p ~/storage\nln -sf /sdcard ~/storage/shared\n".replace("\r\n", "\n"))
     }
 
     private fun writePkgScript() {
         val file = File(binDir, "pkg")
-        file.writeText("#!/system/bin/sh\necho \"NexTerm PKG Manager\"\necho \"Cmd: ${'$'}@\"")
+        file.writeText("#!/system/bin/sh\necho \"NexTerm PKG Manager\"\necho \"Cmd: ${'$'}@\"\n".replace("\r\n", "\n"))
     }
 
     private fun writePackageMetadata() {

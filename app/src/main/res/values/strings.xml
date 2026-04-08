@@ -3,4 +3,8 @@
     <string name="terminal_notification_channel">Terminal Session</string>
     <string name="terminal_notification_title">NexTerm Running</string>
     <string name="terminal_notification_text">Terminal session is active</string>
+    <string name="stop_service">Stop session</string>
+    <string name="new_session">New session</string>
+    <string name="settings">Settings</string>
+    <string name="bootstrap_error">Bootstrap binary missing. Reinstall app.</string>
 </resources>

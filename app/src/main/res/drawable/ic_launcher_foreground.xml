@@ -4,20 +4,46 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Center group -->
-    <group android:translateX="31" android:translateY="40">
-        <!-- '_' underscore -->
-        <path
-            android:fillColor="#00FF00"
-            android:pathData="M0,12 L16,12 L16,16 L0,16 Z"/>
-        <!-- ':' colon -->
-        <path
-            android:fillColor="#00FF00"
-            android:pathData="M20,8 L24,8 L24,12 L20,12 Z
-                              M20,16 L24,16 L24,20 L20,20 Z"/>
-        <!-- '>' greater-than -->
-        <path
-            android:fillColor="#00FF00"
-            android:pathData="M32,4 L48,14 L32,24 Z"/>
-    </group>
+    <!-- Outer glow ring -->
+    <path
+        android:strokeColor="#003A00"
+        android:strokeWidth="3"
+        android:pathData="M54,18 a36,36 0 1 1 -0.1,0"/>
+
+    <!-- Inner glow ring -->
+    <path
+        android:strokeColor="#005500"
+        android:strokeWidth="1.5"
+        android:pathData="M54,23 a31,31 0 1 1 -0.1,0"/>
+
+    <!-- ======= TERMINAL PROMPT (centered in safe zone, vertically centered) ======= -->
+    <!-- Total content width: ~58dp, centered: starts at x=25, ends at x=83 -->
+
+    <!-- '$' vertical bar -->
+    <path
+        android:fillColor="#00FF41"
+        android:pathData="M25,38 L29,38 L29,62 L25,62 Z"/>
+    <!-- '$' top bar -->
+    <path
+        android:fillColor="#00FF41"
+        android:pathData="M25,39 L39,39 L39,43 L25,43 Z"/>
+    <!-- '$' middle bar -->
+    <path
+        android:fillColor="#00FF41"
+        android:pathData="M25,49 L39,49 L39,53 L25,53 Z"/>
+    <!-- '$' bottom bar -->
+    <path
+        android:fillColor="#00FF41"
+        android:pathData="M25,58 L39,58 L39,62 L25,62 Z"/>
+
+    <!-- '>' arrow -->
+    <path
+        android:fillColor="#00FF41"
+        android:pathData="M45,38 L59,50 L45,62 L41,58 L52,50 L41,42 Z"/>
+
+    <!-- Cursor block (blinking rect) -->
+    <path
+        android:fillColor="#00CC33"
+        android:pathData="M63,49 L75,49 L75,62 L63,62 Z"/>
+
 </vector>

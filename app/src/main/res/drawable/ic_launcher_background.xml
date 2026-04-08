@@ -4,8 +4,78 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Rounded square with dark gradient -->
+    <!-- Deep black base -->
     <path
-        android:fillColor="#1B1B1B"
+        android:fillColor="#0A0A0A"
         android:pathData="M12,0 h84 a12,12 0 0 1 12,12 v84 a12,12 0 0 1 -12,12 h-84 a12,12 0 0 1 -12,-12 v-84 a12,12 0 0 1 12,-12 z"/>
+
+    <!-- Subtle dark green grid lines - horizontal -->
+    <path
+        android:strokeColor="#0D2B0D"
+        android:strokeWidth="0.5"
+        android:pathData="M0,18 L108,18 M0,36 L108,36 M0,54 L108,54 M0,72 L108,72 M0,90 L108,90"/>
+
+    <!-- Subtle dark green grid lines - vertical -->
+    <path
+        android:strokeColor="#0D2B0D"
+        android:strokeWidth="0.5"
+        android:pathData="M18,0 L18,108 M36,0 L36,108 M54,0 L54,108 M72,0 L72,108 M90,0 L90,108"/>
+
+    <!-- Circuit trace - top left -->
+    <path
+        android:strokeColor="#003300"
+        android:strokeWidth="1.2"
+        android:pathData="M12,20 L30,20 L30,30 L45,30"/>
+
+    <!-- Circuit node dot -->
+    <path
+        android:fillColor="#003300"
+        android:pathData="M43,28 a2,2 0 1 1 4,0 a2,2 0 1 1 -4,0"/>
+
+    <!-- Circuit trace - bottom right -->
+    <path
+        android:strokeColor="#003300"
+        android:strokeWidth="1.2"
+        android:pathData="M96,88 L78,88 L78,78 L63,78"/>
+
+    <!-- Circuit node dot -->
+    <path
+        android:fillColor="#003300"
+        android:pathData="M61,76 a2,2 0 1 1 4,0 a2,2 0 1 1 -4,0"/>
+
+    <!-- Circuit trace - top right corner -->
+    <path
+        android:strokeColor="#003300"
+        android:strokeWidth="1.2"
+        android:pathData="M88,12 L88,28 L78,28"/>
+
+    <!-- Neon green corner accent - top left -->
+    <path
+        android:strokeColor="#00FF41"
+        android:strokeWidth="2"
+        android:pathData="M12,0 L0,0 L0,12"/>
+
+    <!-- Neon green corner accent - top right -->
+    <path
+        android:strokeColor="#00FF41"
+        android:strokeWidth="2"
+        android:pathData="M96,0 L108,0 L108,12"/>
+
+    <!-- Neon green corner accent - bottom left -->
+    <path
+        android:strokeColor="#00FF41"
+        android:strokeWidth="2"
+        android:pathData="M0,96 L0,108 L12,108"/>
+
+    <!-- Neon green corner accent - bottom right -->
+    <path
+        android:strokeColor="#00FF41"
+        android:strokeWidth="2"
+        android:pathData="M108,96 L108,108 L96,108"/>
+
+    <!-- Scan line glow effect (thin neon strip) -->
+    <path
+        android:fillColor="#0A1A0A"
+        android:pathData="M0,50 h108 v4 h-108 z"/>
+
 </vector>

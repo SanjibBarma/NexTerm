@@ -15,30 +15,44 @@ class BinaryInstaller(private val context: Context) {
     fun installTermuxBootstrap(info: TermuxBootstrapInfo): Result<Boolean> {
         return runCatching {
             ensureBaseDirs()
-            
             val usrDir = File(root, "usr")
-            // Check if bootstrap is already installed
-            if (File(usrDir, "bin/bash").exists() || File(usrDir, "bin/sh").exists()) {
-                return@runCatching false
-            }
+            if (File(usrDir, "bin/bash").exists() || File(usrDir, "bin/sh").exists()) return@runCatching false
 
-            downloadAndExtractZip(info.bootstrapUrl, root)
-            
-            // Mark as installed
-            versionFile.writeText(info.version.toString())
-            abiFile.writeText(info.arch)
-            
-            true
+            // Mirror URLs for redundancy
+            val mirrors = listOf(
+                info.bootstrapUrl,
+                "https://mirror.n0p.me/termux/termux-packages-24/bootstrap-${info.arch}.zip",
+                "https://mirror.termux.dev/termux-packages-24/bootstrap-${info.arch}.zip"
+            )
+
+            var lastException: Exception? = null
+            for (mirror in mirrors) {
+                try {
+                    downloadAndExtractZip(mirror, root)
+                    return@runCatching true // Success!
+                } catch (e: Exception) {
+                    lastException = e
+                    continue // Try next mirror
+                }
+            }
+            throw lastException ?: Exception("Bootstrap failed across all mirrors.")
         }
     }
 
     private fun downloadAndExtractZip(urlString: String, targetDir: File) {
         val url = java.net.URL(urlString)
         val connection = url.openConnection() as java.net.HttpURLConnection
+        
+        // Advanced Connection Settings
+        connection.connectTimeout = 30000 // 30 seconds
+        connection.readTimeout = 60000    // 1 minute
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Android 14; Mobile; rv:124.0) Gecko/124.0 Firefox/124.0")
+        connection.setRequestProperty("Accept", "*/*")
+        connection.setRequestProperty("Connection", "keep-alive")
+        
         connection.connect()
-
         if (connection.responseCode != java.net.HttpURLConnection.HTTP_OK) {
-            throw Exception("Failed to download bootstrap: ${connection.responseCode}")
+            throw Exception("Mirror $urlString rejected: ${connection.responseCode}")
         }
 
         java.util.zip.ZipInputStream(connection.inputStream).use { zis ->
@@ -52,7 +66,6 @@ class BinaryInstaller(private val context: Context) {
                     java.io.FileOutputStream(newFile).use { fos ->
                         zis.copyTo(fos)
                     }
-                    // Termux binaries need execution permissions
                     if (newFile.absolutePath.contains("/bin/") || newFile.absolutePath.contains("/lib/")) {
                         newFile.setExecutable(true, false)
                         newFile.setReadable(true, false)

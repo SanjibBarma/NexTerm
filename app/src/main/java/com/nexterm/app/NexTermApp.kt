@@ -7,6 +7,7 @@ import android.os.Build
 import com.nexterm.app.di.appModule
 import com.nexterm.app.di.repositoryModule
 import com.nexterm.app.di.terminalModule
+import com.nexterm.app.di.useCaseModule
 import com.nexterm.app.di.viewModelModule
 import com.nexterm.app.package_manager.BootstrapManager
 import org.koin.android.ext.koin.androidContext
@@ -36,7 +37,8 @@ class NexTermApp : Application() {
                 appModule,
                 repositoryModule,
                 viewModelModule,
-                terminalModule
+                terminalModule,
+                useCaseModule
             )
         }
     }

@@ -82,7 +82,8 @@ class TerminalSession(
     rows: Int,
     cols: Int,
     private val bootstrapManager: com.nexterm.app.package_manager.BootstrapManager
-) {
+)
+{
     private val _output = MutableStateFlow("")
     val output: StateFlow<String> = _output.asStateFlow()
 
@@ -109,17 +110,28 @@ class TerminalSession(
     fun start() {
         if (!started.compareAndSet(false, true)) return
         setupEnvironment()
+        val binPath = File(context.filesDir, "usr/bin").absolutePath
         val ok = pty.startShell(
             shell = "/system/bin/sh",
-            args = arrayOf("/system/bin/sh", "-"),
-            environment = mapOf("HOME" to context.filesDir.absolutePath, "PWD" to currentWorkingDirectory),
+            args = arrayOf("/system/bin/sh", "-i"),
+            environment = mapOf(
+                "HOME" to context.filesDir.absolutePath,
+                "PWD" to currentWorkingDirectory,
+                "PATH" to "$binPath:/system/bin:/system/xbin:/vendor/bin",
+                "LD_LIBRARY_PATH" to File(context.filesDir, "usr/lib").absolutePath,
+                "TERM" to "xterm-256color"
+            ),
             workingDirectory = currentWorkingDirectory
         )
         if (!ok) {
             emulator.write("\u001B[31mFailed to start shell\u001B[0m\r\n")
             return
         }
-        emulator.write("\u001B[2J\u001B[H")
+        // Write banner before clearing screen
+        emulator.write("\u001B[32m╔═════════════════════════════════╗\u001B[0m\r\n")
+        emulator.write("\u001B[32m║      NexTerm Terminal Emulator       ║\u001B[0m\r\n")
+        emulator.write("\u001B[32m╚═════════════════════════════════╝\u001B[0m\r\n")
+        emulator.write("\u001B[33m[*] Initializing shell environment...\u001B[0m\r\n")
         startReader()
         startWaiter()
         bootstrapShell()
@@ -131,34 +143,51 @@ class TerminalSession(
 
     private fun bootstrapShell() {
         scope.launch {
+            Log.e("TerminalSession", "bootstrapShell() started")
             _isRunning.value = true
             val sentinelFile = File(context.filesDir, "usr/.bootstrapped")
             val profileFile = File(context.filesDir, "usr/etc/profile")
 
             if (!sentinelFile.exists() || !profileFile.exists()) {
                 if (isBootstrapping.compareAndSet(false, true)) {
+                    Log.e("TerminalSession", "Running bootstrap initialization")
                     emulator.write("\u001B[32m[*] NEX_INITIALIZE...\u001B[0m\r\n")
                     try {
                         bootstrapManager.initialize()
                         delay(200)
+                        Log.e("TerminalSession", "Sending chmod command")
                         pty.write("chmod -R 755 \"${File(context.filesDir, "usr/bin").absolutePath}\"\r")
+                        delay(500)
                         sentinelFile.parentFile?.mkdirs()
                         sentinelFile.createNewFile()
                     } catch (e: Exception) {
+                        Log.e("TerminalSession", "Bootstrap failed: ${e.message}")
                         emulator.write("\u001B[31m[!] FAILED: ${e.message}\u001B[0m\r\n")
                     } finally { isBootstrapping.set(false) }
                 }
             }
 
-            delay(200)
+            delay(300)
+            Log.e("TerminalSession", "Setting permissions on usr/bin")
+            pty.write("chmod -R 755 \"${File(context.filesDir, "usr/bin").absolutePath}\"\r")
+            delay(500)
+
             if (profileFile.exists()) {
+                Log.e("TerminalSession", "Sourcing profile")
                 pty.write(". \"${profileFile.absolutePath}\"\r")
-                delay(300)
-                pty.write("cd \"$currentWorkingDirectory\"\r")
-                delay(100)
-                pty.write("printf '\\033[2J\\033[H'\r")
-                delay(300)
+                delay(500)
             }
+
+            Log.e("TerminalSession", "Changing directory to $currentWorkingDirectory")
+            pty.write("cd \"$currentWorkingDirectory\"\r")
+            delay(500)
+
+            Log.e("TerminalSession", "Sending ready message")
+            emulator.write("\u001B[32m[✓] Terminal ready!\u001B[0m\r\n")
+            pty.write("echo '[NexTerm] Shell prompt ready'\r")
+            delay(300)
+
+            Log.e("TerminalSession", "Bootstrap complete")
             bootstrapActive = false
             _isRunning.value = false
         }
@@ -174,24 +203,47 @@ class TerminalSession(
         readerJob?.cancel()
         readerJob = scope.launch {
             val buffer = ByteArray(4096)
-            while (pty.isRunning()) {
-                val count = pty.read(buffer)
-                if (count > 0) {
-                    val text = buffer.decodeToString(0, count)
-                    emulator.write(text)
-                    _output.value += text
-                    updateRunningState(text)
-                } else if (count < 0) break
+            Log.e("TerminalSession", "Reader thread started")
+            var consecutiveZeroReads = 0
+            while (true) {
+                try {
+                    val count = pty.read(buffer)
+                    if (count > 0) {
+                        consecutiveZeroReads = 0
+                        val text = buffer.decodeToString(0, count)
+                        Log.e("TerminalSession", "Read $count bytes: $text")
+                        emulator.write(text)
+                        _output.value += text
+                        updateRunningState(text)
+                    } else if (count < 0) {
+                        Log.e("TerminalSession", "Read returned -1, exiting reader")
+                        break
+                    } else {
+                        // count == 0
+                        consecutiveZeroReads++
+                        if (consecutiveZeroReads > 100 && !pty.isRunning()) {
+                            Log.e("TerminalSession", "PTY not running and no data, exiting reader")
+                            break
+                        }
+                        delay(10)
+                    }
+                } catch (e: Exception) {
+                    Log.e("TerminalSession", "Exception in reader: ${e.message}")
+                    break
+                }
             }
+            Log.e("TerminalSession", "Reader thread exiting")
             _isRunning.value = false
         }
     }
 
     private fun updateRunningState(text: String) {
         if (bootstrapActive) return
-        val clean = text.replace("\r", "").trim()
-        // If the output ends with our hacker prompt, we are idle
-        if (clean.endsWith("#") || clean.endsWith("$")) {
+        // Remove ANSI escape codes before checking for the prompt
+        val clean = text.replace(Regex("\u001B\\[[;\\d]*[mK]"), "").replace("\r", "").trim()
+
+        // Check if the output ends with a prompt character
+        if (clean.endsWith("#") || clean.endsWith("$") || clean.contains("anon@nexterm")) {
             Log.e("TerminalSession", "Prompt detected, hiding indicator")
             _isRunning.value = false
         }
